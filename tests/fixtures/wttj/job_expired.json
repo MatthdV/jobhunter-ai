@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "uuid": "wttj-job-005",
+      "name": "Automation Engineer",
+      "slug": "automation-engineer-old",
+      "contract_type": {"en": "Full-Time", "fr": "CDI"},
+      "salary": {"min": 60000, "max": 80000, "currency": "EUR", "period": "annual"},
+      "remote": "fulltime",
+      "published_at": "2025-01-01T10:00:00Z",
+      "status": "expired",
+      "company": {"name": "OldCo", "slug": "oldco"},
+      "location": {"city": "Paris", "country_code": "FR"},
+      "description": "Expired listing — should be skipped.",
+      "profile": "",
+      "website_url": "https://www.welcometothejungle.com/fr/companies/oldco/jobs/automation-engineer-old"
+    }
+  ],
+  "meta": {"total": 1, "page": 1, "per_page": 25}
+}
