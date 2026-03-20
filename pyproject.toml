@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jobhunter-ai"
+version = "0.1.0"
+description = "Semi-autonomous job search automation system for Matthieu de Villele"
+requires-python = ">=3.11"
+dependencies = [
+    # Scraping
+    "playwright>=1.42.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.1.0",
+    "httpx>=0.27.0",
+    # AI / Matching
+    "anthropic>=0.34.0",
+    # CV generation
+    "jinja2>=3.1.0",
+    "weasyprint>=62.0",
+    # Gmail
+    "google-api-python-client>=2.120.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.0",
+    # Telegram
+    "python-telegram-bot>=21.0.0",
+    # Storage
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    # Config
+    "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+    # CLI
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+]
+
+[project.scripts]
+jobhunter = "src.main:app"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true

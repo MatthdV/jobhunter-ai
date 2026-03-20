@@ -1,0 +1,129 @@
+# ============================================================
+# Candidate profile — source of truth for matching & generation
+# Extracted from REPORT_Matthieu.md
+# ============================================================
+
+candidate:
+  name: Matthieu de Villele
+  title: Automation & AI Engineer / RevOps Consultant
+  experience_years: 10
+  location: Full Remote (Europe)
+  languages: [fr, en]
+
+salary:
+  # Annual targets (CDI / contract)
+  min_annual: 80000
+  max_annual: 140000
+  # Daily rate targets (freelance / consulting)
+  min_daily_rate: 700
+  max_daily_rate: 1000
+  currency: EUR
+
+# ---------------------------------------------------------------------------
+# Target roles — ordered by priority (descending)
+# ---------------------------------------------------------------------------
+target_roles:
+  - title: RevOps Consultant
+    match_score: 95
+    salary_range: "700-1000€/j"
+    priority: 3
+    keywords: [revops, revenue operations, crm automation, salesforce, hubspot]
+
+  - title: Automation Engineer
+    match_score: 95
+    salary_range: "80-120k€"
+    priority: 3
+    keywords: [automation engineer, workflow automation, n8n, process automation]
+
+  - title: AI Engineer
+    match_score: 90
+    salary_range: "90-130k€"
+    priority: 2
+    keywords: [ai engineer, llm, langchain, rag, agents, openai, claude]
+
+  - title: Platform Engineer
+    match_score: 85
+    salary_range: "85-120k€"
+    priority: 2
+    keywords: [platform engineer, devops, cloud infrastructure, ci/cd, kubernetes]
+
+  - title: Solutions Architect
+    match_score: 80
+    salary_range: "100-140k€"
+    priority: 1
+    keywords: [solutions architect, technical architecture, system design]
+
+# ---------------------------------------------------------------------------
+# Target companies
+# ---------------------------------------------------------------------------
+target_companies:
+  fintech:
+    - Qonto
+    - Spendesk
+    - Alan
+    - Lydia
+    - Payfit
+    - Revolut
+    - Wise
+    - Stripe
+
+  saas:
+    - Notion
+    - Figma
+    - Linear
+    - Vercel
+    - Supabase
+    - GitLab
+
+  consulting:
+    - Theodo
+    - BAM
+    - Malt
+    - Comet
+    - Thoughtworks
+    - Netlight
+
+# ---------------------------------------------------------------------------
+# Search keywords — used by scrapers
+# ---------------------------------------------------------------------------
+search_keywords:
+  - automation engineer
+  - AI engineer
+  - RevOps
+  - n8n expert
+  - workflow automation
+  - LLM integration
+  - process optimization
+  - CRM automation
+  - marketing automation
+  - sales automation
+
+# ---------------------------------------------------------------------------
+# Tech stack — used for matching and CV generation
+# ---------------------------------------------------------------------------
+skills:
+  top_3: [AI Automation, n8n, RevOps]
+  additional: [LangChain, RAG, MCP, Process Optimization, Workflow Automation]
+
+  tech_stack:
+    languages: [Python, JavaScript, TypeScript, Go, SQL, Bash]
+    frameworks: [React, Next.js, Node.js, Express, Django, FastAPI]
+    cloud: [AWS, GCP, Azure, Docker, Kubernetes, Terraform]
+    automation: [n8n, Zapier, Make, GitHub Actions, CI/CD]
+    ai: [OpenAI, Claude, LangChain, RAG, Agents, MCP]
+    data: [PostgreSQL, MongoDB, Redis, Prisma, BigQuery]
+    tools: [Git, Linux, Playwright, VS Code]
+
+# ---------------------------------------------------------------------------
+# Offer filters
+# ---------------------------------------------------------------------------
+filters:
+  remote_only: true
+  min_match_score: 80
+  preferred_contract_types: [CDI, Freelance, Contract]
+  excluded_keywords:
+    - junior
+    - stage
+    - internship
+    - stagiaire
+    - alternance
