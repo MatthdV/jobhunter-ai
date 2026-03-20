@@ -72,6 +72,11 @@ class EmailHandler:
         """Remove the UNREAD label from a message."""
         raise NotImplementedError
 
-    def _build_service(self):  # type: ignore[return]
-        """Build and return an authenticated Gmail API service object."""
+    def _build_service(self) -> object:
+        """Build and return an authenticated Gmail API service object.
+
+        Returns a `googleapiclient.discovery.Resource` instance.
+        Typed as `object` here to avoid a hard dependency on the google
+        client library at import time; cast at the call site.
+        """
         raise NotImplementedError
