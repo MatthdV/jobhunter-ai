@@ -1,0 +1,47 @@
+{
+  "jobs": [
+    {
+      "uuid": "wttj-job-001",
+      "name": "Senior Automation Engineer",
+      "slug": "senior-automation-engineer",
+      "contract_type": {"en": "Full-Time", "fr": "CDI"},
+      "salary": {"min": 80000, "max": 100000, "currency": "EUR", "period": "annual"},
+      "remote": "fulltime",
+      "published_at": "2026-03-15T10:00:00Z",
+      "company": {"name": "Acme Corp", "slug": "acme-corp"},
+      "location": {"city": "Paris", "country_code": "FR"},
+      "description": "We are looking for a Senior Automation Engineer with experience in n8n and Python.",
+      "profile": "Strong Python skills required.",
+      "website_url": "https://www.welcometothejungle.com/fr/companies/acme-corp/jobs/senior-automation-engineer"
+    },
+    {
+      "uuid": "wttj-job-002",
+      "name": "RevOps Lead",
+      "slug": "revops-lead",
+      "contract_type": {"en": "Full-Time", "fr": "CDI"},
+      "salary": {"min": 70000, "max": 90000, "currency": "EUR", "period": "annual"},
+      "remote": "fulltime",
+      "published_at": "2026-03-14T09:00:00Z",
+      "company": {"name": "TechStart", "slug": "techstart"},
+      "location": {"city": "Lyon", "country_code": "FR"},
+      "description": "RevOps Lead to scale our go-to-market engine. Full remote.",
+      "profile": "HubSpot and Salesforce expertise.",
+      "website_url": "https://www.welcometothejungle.com/fr/companies/techstart/jobs/revops-lead"
+    },
+    {
+      "uuid": "wttj-job-003",
+      "name": "AI Integration Consultant",
+      "slug": "ai-integration-consultant",
+      "contract_type": {"en": "Freelance", "fr": "Freelance"},
+      "salary": {"min": 120000, "max": 150000, "currency": "EUR", "period": "annual"},
+      "remote": "fulltime",
+      "published_at": "2026-03-13T08:00:00Z",
+      "company": {"name": "AI Ventures", "slug": "ai-ventures"},
+      "location": {"city": null, "country_code": "FR"},
+      "description": "AI integration consultant to help clients automate workflows. Distanciel.",
+      "profile": "Claude and OpenAI API experience preferred.",
+      "website_url": "https://www.welcometothejungle.com/fr/companies/ai-ventures/jobs/ai-integration-consultant"
+    }
+  ],
+  "meta": {"total": 3, "page": 1, "per_page": 25}
+}
