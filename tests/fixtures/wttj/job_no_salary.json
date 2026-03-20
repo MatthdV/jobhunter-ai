@@ -1,0 +1,19 @@
+{
+  "jobs": [
+    {
+      "uuid": "wttj-job-004",
+      "name": "Data Operations Manager",
+      "slug": "data-operations-manager",
+      "contract_type": {"en": "Full-Time", "fr": "CDI"},
+      "salary": null,
+      "remote": "fulltime",
+      "published_at": "2026-03-12T10:00:00Z",
+      "company": {"name": "DataCo", "slug": "dataco"},
+      "location": {"city": "Remote", "country_code": "FR"},
+      "description": "Manage data operations in a fully remote team.",
+      "profile": "Experience with dbt and BigQuery.",
+      "website_url": "https://www.welcometothejungle.com/fr/companies/dataco/jobs/data-operations-manager"
+    }
+  ],
+  "meta": {"total": 1, "page": 1, "per_page": 25}
+}
