@@ -162,7 +162,7 @@ Cookie file: `data/linkedin_cookies.json` — already in `.gitignore`.
 
 ## Normalisation
 
-`BaseScraper._normalize(job: Job) -> Job` runs on every parsed job:
+`BaseScraper._normalize(job: Job) -> Job | None` runs on every parsed job. Returns `None` when the job is filtered out (excluded keyword match); `BaseScraper.search()` silently drops `None` results before returning.
 
 - `title`: stripped, title case
 - `salary_min` / `salary_max`: extracted via `_parse_salary()`, in EUR/year
@@ -204,8 +204,8 @@ src/scrapers/
 ├── indeed.py        # Implement: BS4 HTML parsing
 └── linkedin.py      # Implement: stealth + cookies + login flow
 
-data/               # NEW dir, created at runtime by LinkedInScraper._setup()
-└── .gitkeep
+data/               # NOT committed — created at runtime by LinkedInScraper._setup()
+                    # via Path("data").mkdir(exist_ok=True)
 
 tests/
 ├── fixtures/
