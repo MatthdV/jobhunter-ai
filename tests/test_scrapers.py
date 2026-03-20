@@ -474,3 +474,114 @@ class TestWTTJSearch:
         with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
             results = await scraper.search(keywords=["automation"], seen_urls={url})
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — IndeedScraper
+# ---------------------------------------------------------------------------
+
+from bs4 import BeautifulSoup, Tag
+
+from src.scrapers.indeed import IndeedScraper
+
+INDEED_FIXTURES = Path(__file__).parent / "fixtures" / "indeed"
+
+
+def _load_indeed_cards(filename: str) -> list[Tag]:
+    html = (INDEED_FIXTURES / filename).read_text()
+    soup = BeautifulSoup(html, "lxml")
+    return soup.select(".job_seen_beacon")
+
+
+class TestIndeedParseRaw:
+    def setup_method(self) -> None:
+        self.scraper = IndeedScraper.__new__(IndeedScraper)
+        self.scraper.headless = True
+        from src.scrapers.base import _TokenBucket
+        self.scraper._token_bucket = _TokenBucket(60, 60 / 3600)
+
+    @pytest.mark.asyncio
+    async def test_parse_complete_job(self) -> None:
+        cards = _load_indeed_cards("search_results.html")
+        job = await self.scraper._parse_raw(cards[0])
+        assert job.title == "Senior RevOps Engineer"  # raw title — _normalize not called here
+        assert "abc123" in job.url
+        assert job.source == "indeed"
+        assert job.salary_raw == "80 000 € - 100 000 € par an"
+
+    @pytest.mark.asyncio
+    async def test_parse_missing_salary(self) -> None:
+        cards = _load_indeed_cards("job_no_location.html")
+        job = await self.scraper._parse_raw(cards[0])
+        assert job.salary_raw == "Selon profil"
+        assert job.salary_min is None
+        assert job.salary_max is None
+
+    @pytest.mark.asyncio
+    async def test_parse_no_location(self) -> None:
+        cards = _load_indeed_cards("job_no_location.html")
+        job = await self.scraper._parse_raw(cards[0])
+        assert job.location is None or job.location == ""
+
+    @pytest.mark.asyncio
+    async def test_parse_daily_rate_salary_raw_preserved(self) -> None:
+        # _parse_raw stores salary_raw; _normalize calls _parse_salary
+        cards = _load_indeed_cards("job_daily_rate.html")
+        job = await self.scraper._parse_raw(cards[0])
+        assert "700" in (job.salary_raw or "")
+
+    @pytest.mark.asyncio
+    async def test_parse_remote_keyword_in_location(self) -> None:
+        cards = _load_indeed_cards("search_results.html")
+        job = await self.scraper._parse_raw(cards[1])  # "France entière (Télétravail)"
+        assert job.location is not None
+
+
+class TestIndeedSearch:
+    @pytest.mark.asyncio
+    async def test_search_returns_list_of_jobs(self) -> None:
+        cards = _load_indeed_cards("search_results.html")
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return cards
+
+        scraper = IndeedScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["revops"])
+        assert len(results) == 3
+
+    @pytest.mark.asyncio
+    async def test_excluded_keyword_dropped(self) -> None:
+        html = """
+        <div class="job_seen_beacon">
+          <h2 class="jobTitle"><a data-jk="j1" href="/pagead/clk?job=j1">
+            <span title="Junior Developer">Junior Developer</span>
+          </a></h2>
+          <span class="companyName">Co</span>
+          <div class="companyLocation">Remote</div>
+          <div class="job-snippet"><ul><li>CDI</li></ul></div>
+        </div>
+        """
+        soup = BeautifulSoup(html, "lxml")
+        cards = soup.select(".job_seen_beacon")
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return cards
+
+        scraper = IndeedScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["dev"])
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_deduplication_in_batch(self) -> None:
+        cards = _load_indeed_cards("search_results.html")
+        card = cards[0]
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [card, card]
+
+        scraper = IndeedScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["revops"])
+        assert len(results) == 1
