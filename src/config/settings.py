@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     )
 
     # --- Anthropic ---
-    anthropic_api_key: str = Field(..., description="Anthropic API key (required)")
+    # Empty by default so the module can be imported without a .env file.
+    # Scorer and CoverLetterGenerator will raise ConfigurationError at init
+    # time if this is not set when AI features are actually needed.
+    anthropic_api_key: str = Field("", description="Anthropic API key — required for AI features")
     anthropic_model: str = Field("claude-opus-4-6", description="Claude model for scoring and generation")
 
     # --- Gmail ---
@@ -39,6 +42,10 @@ class Settings(BaseSettings):
     min_match_score: int = Field(80, ge=0, le=100, description="Minimum AI match score to consider")
 
     @property
+    def is_ai_configured(self) -> bool:
+        return bool(self.anthropic_api_key)
+
+    @property
     def is_gmail_configured(self) -> bool:
         return bool(self.gmail_client_id and self.gmail_client_secret and self.gmail_refresh_token)
 
@@ -47,4 +54,8 @@ class Settings(BaseSettings):
         return bool(self.telegram_bot_token and self.telegram_chat_id)
 
 
-settings = Settings()  # type: ignore[call-arg]
+class ConfigurationError(RuntimeError):
+    """Raised when a required credential or setting is missing at feature init time."""
+
+
+settings = Settings()

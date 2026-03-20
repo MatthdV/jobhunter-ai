@@ -26,11 +26,11 @@ Semi-autonomous model: the user only validates and passes interviews. Everything
 |-----------------|-----------------------------------------|
 | Scraping        | Playwright + Python                     |
 | IA Matching     | Claude API + Embeddings                 |
-| CV Generation   | LaTeX + Jinja2                          |
+| CV Generation   | Jinja2 + WeasyPrint (HTML → PDF)        |
 | Email           | Gmail API                               |
 | Scheduling      | Calendly API                            |
 | Notifications   | Telegram Bot + Email                    |
-| Storage         | Notion or PostgreSQL                    |
+| Storage         | SQLite (dev) / PostgreSQL (prod)        |
 | Automation      | n8n for workflow orchestration          |
 
 ## Commands
@@ -87,10 +87,5 @@ src/
 - **Daily cap**: `settings.max_applications_per_day` hard-limits submissions
 - **Match threshold**: only jobs with `match_score >= settings.min_match_score` proceed to the apply phase
 - **Profile source of truth**: `src/config/profile.yaml` drives scoring prompts, CV generation, and search keywords — edit here, not in code
-
-## Key Design Decisions
-
-- **Human-in-the-loop**: Applications require explicit approval before submission — never automate this gate away
-- **Personalization over volume**: Each CV and cover letter is tailored per offer, not blasted generically
-- **Scoring threshold**: Only process offers with IA match score > 80%
-- **Profile**: Target roles are Automation Engineer (95% match) and RevOps Consultant (95% match); see `REPORT_Matthieu.md` for full strategy and company targets
+- **Personalization over volume**: each CV and cover letter is tailored per offer via Claude; never blasted generically
+- **ANTHROPIC_API_KEY**: optional at import time, enforced at runtime by `Scorer.__init__` / `CoverLetterGenerator.__init__` via `ConfigurationError`
