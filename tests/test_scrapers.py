@@ -1,55 +1,324 @@
-"""Tests for scrapers — Phase 2."""
+"""Tests for scrapers — Phase 1."""
+
+from dataclasses import fields
 
 import pytest
 
-from src.scrapers.linkedin import LinkedInScraper
-from src.scrapers.indeed import IndeedScraper
-from src.scrapers.wttj import WTTJScraper
+from src.scrapers.exceptions import (
+    AuthenticationError,
+    ParseError,
+    RateLimitError,
+    ScraperError,
+)
+from src.scrapers.filters import ScraperFilters
 
 
-class TestBaseScraper:
-    """Contract tests that apply to every scraper implementation."""
+# ---------------------------------------------------------------------------
+# Task 1 — Exceptions
+# ---------------------------------------------------------------------------
 
-    def test_source_attribute_is_set(self) -> None:
-        pass  # Phase 2
+class TestExceptions:
+    def test_scraper_error_is_base(self) -> None:
+        assert issubclass(RateLimitError, ScraperError)
+        assert issubclass(AuthenticationError, ScraperError)
+        assert issubclass(ParseError, ScraperError)
 
-    def test_implements_abstract_methods(self) -> None:
-        pass  # Phase 2
+    def test_exceptions_are_exception_subclasses(self) -> None:
+        assert issubclass(ScraperError, Exception)
+
+    def test_exceptions_accept_message(self) -> None:
+        err = RateLimitError("HTTP 429")
+        assert str(err) == "HTTP 429"
+
+        err2 = AuthenticationError("cookies expired")
+        assert str(err2) == "cookies expired"
+
+        err3 = ParseError("unexpected structure")
+        assert str(err3) == "unexpected structure"
 
 
-class TestLinkedInScraper:
+# ---------------------------------------------------------------------------
+# Task 1 — ScraperFilters
+# ---------------------------------------------------------------------------
+
+class TestScraperFilters:
+    def test_default_values(self) -> None:
+        f = ScraperFilters()
+        assert f.remote_only is True
+        assert "CDI" in f.contract_types
+        assert "Freelance" in f.contract_types
+        assert "Contract" in f.contract_types
+        assert f.min_salary is None
+
+    def test_default_excluded_keywords(self) -> None:
+        f = ScraperFilters()
+        assert "junior" in f.excluded_keywords
+        assert "stage" in f.excluded_keywords
+        assert "internship" in f.excluded_keywords
+        assert "stagiaire" in f.excluded_keywords
+        assert "alternance" in f.excluded_keywords
+
+    def test_contract_types_are_independent_instances(self) -> None:
+        f1 = ScraperFilters()
+        f2 = ScraperFilters()
+        f1.contract_types.append("CDD")
+        assert "CDD" not in f2.contract_types
+
+    def test_custom_values(self) -> None:
+        f = ScraperFilters(remote_only=False, min_salary=80000)
+        assert f.remote_only is False
+        assert f.min_salary == 80000
+
+    def test_is_dataclass(self) -> None:
+        field_names = {f.name for f in fields(ScraperFilters)}
+        assert field_names == {"remote_only", "contract_types", "min_salary", "excluded_keywords"}
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — BaseScraper normalization + salary parsing
+# ---------------------------------------------------------------------------
+
+from src.scrapers.base import BaseScraper, WORKING_DAYS_PER_YEAR
+from src.storage.models import Job
+
+
+class _ConcreteScraper(BaseScraper):
+    """Minimal concrete implementation for unit testing BaseScraper logic."""
+
+    source = "test"
+    MIN_DELAY = 0.0
+    MAX_DELAY = 0.0
+    MAX_RPH = 3600
+
+    async def _fetch_raw(
+        self,
+        keywords: list[str],
+        location: str,
+        filters: ScraperFilters | None,
+        limit: int,
+    ) -> list[object]:
+        return []
+
+    async def _parse_raw(self, raw: object) -> Job:
+        raise NotImplementedError
+
+
+class TestWorkingDaysConstant:
+    def test_value(self) -> None:
+        assert WORKING_DAYS_PER_YEAR == 220
+
+
+class TestParseSalary:
+    def setup_method(self) -> None:
+        self.scraper = _ConcreteScraper()
+
+    def test_annual_range_french_format(self) -> None:
+        assert self.scraper._parse_salary("80 000 € - 100 000 €/an") == (80000, 100000)
+
+    def test_annual_range_compact(self) -> None:
+        assert self.scraper._parse_salary("80000-100000€/an") == (80000, 100000)
+
+    def test_daily_rate(self) -> None:
+        # 700 * 220 = 154000
+        assert self.scraper._parse_salary("700€/jour") == (154000, 154000)
+
+    def test_daily_rate_with_spaces(self) -> None:
+        assert self.scraper._parse_salary("700 €/jour") == (154000, 154000)
+
+    def test_single_annual_amount(self) -> None:
+        assert self.scraper._parse_salary("80 000 €/an") == (80000, 80000)
+
+    def test_selon_profil_returns_none(self) -> None:
+        assert self.scraper._parse_salary("Selon profil") == (None, None)
+
+    def test_empty_string_returns_none(self) -> None:
+        assert self.scraper._parse_salary("") == (None, None)
+
+    def test_k_notation(self) -> None:
+        assert self.scraper._parse_salary("80k-100k €/an") == (80000, 100000)
+
+
+class TestNormalize:
+    def setup_method(self) -> None:
+        self.scraper = _ConcreteScraper()
+        self.filters = ScraperFilters()
+
+    def _make_job(self, **kwargs: object) -> Job:
+        defaults: dict[str, object] = {
+            "title": "Senior Automation Engineer",
+            "url": "https://example.com/job/1",
+            "source": "test",
+            "description": "Great remote position.",
+            "location": "Remote",
+            "salary_raw": None,
+            "salary_min": None,
+            "salary_max": None,
+            "contract_type": "CDI",
+        }
+        defaults.update(kwargs)
+        return Job(**defaults)  # type: ignore[arg-type]
+
+    def test_title_is_title_cased(self) -> None:
+        job = self._make_job(title="senior automation engineer")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.title == "Senior Automation Engineer"
+
+    def test_title_is_stripped(self) -> None:
+        job = self._make_job(title="  Senior Dev  ")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.title == "Senior Dev"
+
+    def test_scraped_at_is_set(self) -> None:
+        from datetime import timezone
+        job = self._make_job()
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.scraped_at is not None
+        assert result.scraped_at.tzinfo == timezone.utc
+
+    def test_source_set_from_class_attribute(self) -> None:
+        job = self._make_job(source="")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.source == "test"
+
+    def test_is_remote_detected_in_location(self) -> None:
+        job = self._make_job(location="Télétravail complet", description="Standard role.")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.is_remote is True
+
+    def test_is_remote_detected_in_title(self) -> None:
+        job = self._make_job(title="Remote Senior Engineer", location="Paris")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.is_remote is True
+
+    def test_is_remote_detected_in_description(self) -> None:
+        job = self._make_job(location="Paris", description="Poste en distanciel.")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.is_remote is True
+
+    def test_is_remote_false_when_not_mentioned(self) -> None:
+        job = self._make_job(location="Paris", description="On-site position.")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.is_remote is False
+
+    def test_excluded_keyword_in_title_returns_none(self) -> None:
+        job = self._make_job(title="Junior Python Developer")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is None
+
+    def test_excluded_keyword_in_description_returns_none(self) -> None:
+        job = self._make_job(description="This is a stage position.")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is None
+
+    def test_excluded_keyword_case_insensitive(self) -> None:
+        job = self._make_job(title="JUNIOR Developer")
+        result = self.scraper._normalize(job, self.filters)
+        assert result is None
+
+    def test_salary_parsed_when_raw_present_and_min_max_none(self) -> None:
+        job = self._make_job(salary_raw="80 000 € - 100 000 €/an", salary_min=None, salary_max=None)
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.salary_min == 80000
+        assert result.salary_max == 100000
+
+    def test_salary_not_overwritten_when_already_set(self) -> None:
+        # WTTJ provides structured salary — _normalize must not overwrite it
+        job = self._make_job(salary_raw="80k-100k", salary_min=80000, salary_max=100000)
+        result = self.scraper._normalize(job, self.filters)
+        assert result is not None
+        assert result.salary_min == 80000
+        assert result.salary_max == 100000
+
+    def test_no_filters_does_not_crash(self) -> None:
+        job = self._make_job()
+        result = self.scraper._normalize(job, filters=None)
+        assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — BaseScraper deduplication + search() wiring
+# ---------------------------------------------------------------------------
+
+from unittest.mock import AsyncMock, patch
+
+
+class _DupScraper(_ConcreteScraper):
+    """Scraper that returns a controlled set of raw items for dedup testing."""
+
+    def __init__(self, raw_items: list[Job]) -> None:
+        super().__init__()
+        self._raw_items = raw_items
+
+    async def _fetch_raw(
+        self,
+        keywords: list[str],
+        location: str,
+        filters: ScraperFilters | None,
+        limit: int,
+    ) -> list[object]:
+        return list(self._raw_items)  # type: ignore[return-value]
+
+    async def _parse_raw(self, raw: object) -> Job:
+        assert isinstance(raw, Job)
+        return raw
+
+
+def _job(url: str, title: str = "Senior Dev", description: str = "Good remote job.") -> Job:
+    return Job(
+        title=title,
+        url=url,
+        source="test",
+        description=description,
+        location="Remote",
+    )
+
+
+class TestSearchDeduplication:
     @pytest.mark.asyncio
-    async def test_scrape_returns_list_of_jobs(self) -> None:
-        pass  # Phase 2
+    async def test_in_batch_dedup_drops_second_occurrence(self) -> None:
+        j = _job("https://example.com/job/1")
+        scraper = _DupScraper([j, j])
+        results = await scraper.search(keywords=["dev"])
+        urls = [r.url for r in results]
+        assert urls.count("https://example.com/job/1") == 1
 
     @pytest.mark.asyncio
-    async def test_skips_duplicate_urls(self) -> None:
-        pass  # Phase 2
-
-    def test_parse_salary_annual(self) -> None:
-        pass  # Phase 2
-
-    def test_parse_salary_daily_rate(self) -> None:
-        pass  # Phase 2
-
-    def test_parse_salary_returns_none_on_unknown_format(self) -> None:
-        pass  # Phase 2
-
-
-class TestIndeedScraper:
-    @pytest.mark.asyncio
-    async def test_scrape_returns_list_of_jobs(self) -> None:
-        pass  # Phase 2
-
-    def test_parse_salary_fr_format(self) -> None:
-        pass  # Phase 2
-
-
-class TestWTTJScraper:
-    @pytest.mark.asyncio
-    async def test_scrape_returns_list_of_jobs(self) -> None:
-        pass  # Phase 2
+    async def test_seen_urls_param_drops_known_url(self) -> None:
+        j = _job("https://example.com/job/99")
+        scraper = _DupScraper([j])
+        results = await scraper.search(
+            keywords=["dev"],
+            seen_urls={"https://example.com/job/99"},
+        )
+        assert results == []
 
     @pytest.mark.asyncio
-    async def test_respects_limit_parameter(self) -> None:
-        pass  # Phase 2
+    async def test_normalize_none_dropped(self) -> None:
+        j = _job("https://example.com/job/2", title="Junior Developer")  # excluded keyword
+        scraper = _DupScraper([j])
+        results = await scraper.search(keywords=["dev"])
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_limit_respected(self) -> None:
+        jobs = [_job(f"https://example.com/job/{i}") for i in range(10)]
+        scraper = _DupScraper(jobs)
+        results = await scraper.search(keywords=["dev"], limit=3)
+        assert len(results) == 3
+
+    @pytest.mark.asyncio
+    async def test_search_returns_list_of_jobs(self) -> None:
+        j = _job("https://example.com/job/100")
+        scraper = _DupScraper([j])
+        results = await scraper.search(keywords=["dev"])
+        assert isinstance(results, list)
+        assert all(isinstance(r, Job) for r in results)
