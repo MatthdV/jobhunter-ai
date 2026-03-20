@@ -1,3 +1,6 @@
+# Git worktrees
+.worktrees/
+
 # Environment & secrets — never commit
 .env
 *.env.local
