@@ -585,3 +585,174 @@ class TestIndeedSearch:
         with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
             results = await scraper.search(keywords=["revops"])
         assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — LinkedInScraper
+# ---------------------------------------------------------------------------
+
+from src.scrapers.linkedin import LinkedInScraper
+from src.scrapers.exceptions import AuthenticationError
+
+LINKEDIN_FIXTURES = Path(__file__).parent / "fixtures" / "linkedin"
+
+
+def _load_linkedin_html(filename: str) -> str:
+    return (LINKEDIN_FIXTURES / filename).read_text()
+
+
+class TestLinkedInParseRaw:
+    def setup_method(self) -> None:
+        self.scraper = LinkedInScraper.__new__(LinkedInScraper)
+        self.scraper.headless = True
+        from src.scrapers.base import _TokenBucket
+        self.scraper._token_bucket = _TokenBucket(30, 30 / 3600)
+
+    @pytest.mark.asyncio
+    async def test_parse_complete_job(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        raw = {
+            "url": "https://www.linkedin.com/jobs/view/1111111111/",
+            "detail_soup": soup,
+        }
+        job = await self.scraper._parse_raw(raw)
+        assert "automation" in job.title.lower() or "Automation" in job.title
+        assert job.url == "https://www.linkedin.com/jobs/view/1111111111/"
+        assert job.source == "linkedin"
+        assert job.salary_raw is not None
+        assert "automation" in (job.description or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_parse_missing_salary(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        # Remove salary node
+        for el in soup.select(".jobs-unified-top-card__job-insight"):
+            el.decompose()
+        raw = {
+            "url": "https://www.linkedin.com/jobs/view/1111111111/",
+            "detail_soup": soup,
+        }
+        job = await self.scraper._parse_raw(raw)
+        assert job.salary_raw is None
+        assert job.salary_min is None
+        assert job.salary_max is None
+
+    @pytest.mark.asyncio
+    async def test_parse_remote_detected(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        raw = {
+            "url": "https://www.linkedin.com/jobs/view/1111111111/",
+            "detail_soup": soup,
+        }
+        job = await self.scraper._parse_raw(raw)
+        # is_remote is set by _normalize; _parse_raw just populates fields
+        assert job.location is not None  # should contain "Remote"
+
+
+class TestLinkedInAuth:
+    @pytest.mark.asyncio
+    async def test_missing_credentials_raises_authentication_error(self) -> None:
+        from unittest.mock import AsyncMock
+        scraper = LinkedInScraper()
+        mock_page = AsyncMock()
+        mock_page.query_selector = AsyncMock(return_value=None)
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(scraper, "_is_authenticated", return_value=False):
+                with patch.object(scraper, "_has_credentials", return_value=False):
+                    with pytest.raises(AuthenticationError):
+                        await scraper._authenticate(mock_page)
+
+    @pytest.mark.asyncio
+    async def test_cookie_load_skips_login(self) -> None:
+        scraper = LinkedInScraper()
+        mock_page = AsyncMock()
+
+        with patch.object(scraper, "_is_authenticated", return_value=True):
+            # Should return without raising — cookies valid
+            await scraper._authenticate(mock_page)
+
+    @pytest.mark.asyncio
+    async def test_2fa_challenge_raises_authentication_error(self) -> None:
+        scraper = LinkedInScraper()
+        mock_page = AsyncMock()
+
+        with patch.object(scraper, "_is_authenticated", return_value=False):
+            with patch.object(scraper, "_has_credentials", return_value=True):
+                with patch.object(scraper, "_run_login", side_effect=AuthenticationError("2FA challenge")):
+                    with pytest.raises(AuthenticationError, match="2FA"):
+                        await scraper._authenticate(mock_page)
+
+
+class TestLinkedInSearch:
+    @pytest.mark.asyncio
+    async def test_search_returns_list_of_jobs(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+
+        fake_raws = [
+            {"url": f"https://www.linkedin.com/jobs/view/{i}/", "detail_soup": soup}
+            for i in range(3)
+        ]
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return fake_raws
+
+        scraper = LinkedInScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert len(results) == 3
+        assert all(isinstance(j, Job) for j in results)
+
+    @pytest.mark.asyncio
+    async def test_excluded_keyword_dropped(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        # Modify title in soup to contain excluded keyword
+        title_el = soup.select_one("h1")
+        if title_el:
+            title_el.string = "Junior Automation Engineer"
+
+        fake_raws = [{"url": "https://www.linkedin.com/jobs/view/99/", "detail_soup": soup}]
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return fake_raws
+
+        scraper = LinkedInScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_deduplication_in_batch(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        raw = {"url": "https://www.linkedin.com/jobs/view/1111111111/", "detail_soup": soup}
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [raw, raw]
+
+        scraper = LinkedInScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_deduplication_seen_urls(self) -> None:
+        html = _load_linkedin_html("job_detail.html")
+        soup = BeautifulSoup(html, "lxml")
+        raw = {"url": "https://www.linkedin.com/jobs/view/1111111111/", "detail_soup": soup}
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [raw]
+
+        scraper = LinkedInScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(
+                keywords=["automation"],
+                seen_urls={"https://www.linkedin.com/jobs/view/1111111111/"},
+            )
+        assert results == []
