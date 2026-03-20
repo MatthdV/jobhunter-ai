@@ -26,9 +26,16 @@ class Experience:
 
 
 class ProfileAnalyzer:
-    """Analyze professional profile and generate job search insights."""
+    """Analyze professional profile and generate job search insights.
+
+    TODO (Phase 2): Load tech_keywords, target_roles, and target_companies
+    from src/config/profile.yaml instead of hardcoding them here.
+    The canonical data lives in profile.yaml — these hardcoded lists are
+    a temporary duplicate that will diverge if profile.yaml is updated.
+    """
 
     def __init__(self) -> None:
+        # TODO: replace with yaml.safe_load(Path("src/config/profile.yaml").read_text())
         self.tech_keywords: Dict[str, List[str]] = {
             'languages': ['Python', 'JavaScript', 'TypeScript', 'Go', 'Java', 'SQL', 'Bash'],
             'frameworks': ['React', 'Next.js', 'Node.js', 'Express', 'Django', 'FastAPI'],
@@ -123,12 +130,21 @@ class ProfileAnalyzer:
         return suggestions
 
     def generate_about_section(self, profile_data: Dict[str, Any]) -> str:
-        """Generate optimized LinkedIn About section from profile data."""
+        """Generate a LinkedIn About section template from profile data.
+
+        Returns a template with placeholder metrics that must be replaced
+        with real data before publishing. Placeholders are marked with
+        [FILL: description] so they are impossible to accidentally publish.
+        """
         if not isinstance(profile_data, dict):
             raise ValueError("profile_data must be a dict")
 
         years = profile_data.get('years_exp', 10)
         years_str = f"{years}+" if isinstance(years, int) else str(years)
+
+        # Caller must supply concrete achievements — placeholders are intentional
+        achievement_1 = profile_data.get('achievement_1', '[FILL: -X% metric for specific client]')
+        achievement_2 = profile_data.get('achievement_2', '[FILL: +Y% outcome via automation]')
 
         about = f"""🚀 Automation & AI Engineer | RevOps Consultant
 
@@ -142,8 +158,8 @@ Je transforme les processus métier complexes en systèmes automatisés intellig
 
 🎯 Résultats concrets :
 • {years_str} ans d'expérience en automation et IA
-• -40% temps de traitement pour [Client X]
-• +25% conversion leads via automation marketing
+• {achievement_1}
+• {achievement_2}
 
 🛠️ Stack technique :
 AI/LLM : OpenAI, Claude, LangChain, RAG
