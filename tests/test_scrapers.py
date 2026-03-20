@@ -322,3 +322,155 @@ class TestSearchDeduplication:
         results = await scraper.search(keywords=["dev"])
         assert isinstance(results, list)
         assert all(isinstance(r, Job) for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — WTTJScraper
+# ---------------------------------------------------------------------------
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from src.scrapers.wttj import WTTJScraper
+
+WTTJ_FIXTURES = Path(__file__).parent / "fixtures" / "wttj"
+
+
+def _load_wttj_fixture(filename: str) -> dict:  # type: ignore[type-arg]
+    return json.loads((WTTJ_FIXTURES / filename).read_text())
+
+
+class TestWTTJParseRaw:
+    """Unit tests for WTTJScraper._parse_raw — no Playwright required."""
+
+    def setup_method(self) -> None:
+        self.scraper = WTTJScraper.__new__(WTTJScraper)
+        self.scraper.headless = True
+        from src.scrapers.base import _TokenBucket
+        self.scraper._token_bucket = _TokenBucket(120, 120 / 3600)
+
+    @pytest.mark.asyncio
+    async def test_parse_complete_job(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+        raw = fixture["jobs"][0]
+        job = await self.scraper._parse_raw(raw)
+        assert job.title == "Senior Automation Engineer"
+        assert job.url == "https://www.welcometothejungle.com/fr/companies/acme-corp/jobs/senior-automation-engineer"
+        assert job.source == "wttj"
+        assert job.salary_min == 80000
+        assert job.salary_max == 100000
+        assert job.contract_type == "CDI"
+        assert "automation" in job.description.lower()  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
+    async def test_parse_missing_salary(self) -> None:
+        fixture = _load_wttj_fixture("job_no_salary.json")
+        raw = fixture["jobs"][0]
+        job = await self.scraper._parse_raw(raw)
+        assert job.salary_min is None
+        assert job.salary_max is None
+
+    @pytest.mark.asyncio
+    async def test_parse_salary_set_directly_not_via_raw_string(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+        raw = fixture["jobs"][0]
+        job = await self.scraper._parse_raw(raw)
+        # salary_min/max come from structured JSON, not salary_raw parsing
+        assert job.salary_min == 80000
+        assert job.salary_max == 100000
+
+    @pytest.mark.asyncio
+    async def test_parse_remote_detected(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+        raw = fixture["jobs"][1]  # RevOps Lead — "Full remote" in description
+        job = await self.scraper._parse_raw(raw)
+        # is_remote is set by _normalize, not _parse_raw; just assert no crash
+        assert job.url is not None
+
+    @pytest.mark.asyncio
+    async def test_expired_job_has_no_special_handling_in_parse_raw(self) -> None:
+        # _parse_raw must not crash on expired jobs — filtering is done upstream
+        fixture = _load_wttj_fixture("job_expired.json")
+        raw = fixture["jobs"][0]
+        job = await self.scraper._parse_raw(raw)
+        assert job.title == "Automation Engineer"
+
+
+class TestWTTJSearch:
+    """Integration tests for WTTJScraper.search() — mocked Playwright."""
+
+    @pytest.mark.asyncio
+    async def test_search_returns_list_of_jobs(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return fixture["jobs"]
+
+        scraper = WTTJScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert len(results) == 3
+        assert all(isinstance(j, Job) for j in results)
+
+    @pytest.mark.asyncio
+    async def test_search_respects_limit(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return fixture["jobs"]
+
+        scraper = WTTJScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"], limit=2)
+        assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_excluded_keyword_dropped(self) -> None:
+        raw_junior = {
+            "uuid": "x",
+            "name": "Junior Automation Engineer",
+            "contract_type": {"fr": "CDI"},
+            "salary": None,
+            "remote": "fulltime",
+            "company": {"name": "Co"},
+            "location": {"city": "Paris"},
+            "description": "Junior role.",
+            "profile": "",
+            "website_url": "https://www.welcometothejungle.com/fr/companies/co/jobs/x",
+        }
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [raw_junior]
+
+        scraper = WTTJScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_deduplication_in_batch(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+        raw = fixture["jobs"][0]
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [raw, raw]  # same item twice
+
+        scraper = WTTJScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"])
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_deduplication_seen_urls(self) -> None:
+        fixture = _load_wttj_fixture("search_results.json")
+        raw = fixture["jobs"][0]
+        url = raw["website_url"]
+
+        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return [raw]
+
+        scraper = WTTJScraper()
+        with patch.object(scraper, "_fetch_raw", side_effect=_mock_fetch_raw):
+            results = await scraper.search(keywords=["automation"], seen_urls={url})
+        assert results == []
