@@ -55,7 +55,42 @@ class CVGenerator:
         raise NotImplementedError
 
     async def _select_highlights(self, job: Job) -> dict[str, Any]:
-        raise NotImplementedError
+        """Use Claude to identify which experiences and skills to emphasise."""
+        exp_ids = [e["id"] for e in self._profile.get("experiences", [])]
+        skills = self._profile.get("skills", {})
+        all_skills: list[str] = skills.get("top_3", []) + skills.get("additional", [])
+
+        user_message = (
+            "## Candidate Profile\n"
+            f"Experience IDs available: {', '.join(exp_ids)}\n"
+            f"Skills available: {', '.join(all_skills)}\n\n"
+            "## Job Offer\n"
+            f"Title: {job.title}\n"
+            f"Company: {job.company.name if job.company else 'Unknown'}\n"
+            f"Description:\n{(job.description or '')[:1500]}"
+        )
+
+        response = await self._client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=_CV_MAX_TOKENS,
+            system=_CV_SYSTEM_MESSAGE,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        text = next(block.text for block in response.content if hasattr(block, "text"))
+
+        data: dict[str, Any] | None = None
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                with contextlib.suppress(json.JSONDecodeError):
+                    data = json.loads(match.group())
+
+        if data is None:
+            raise ValueError(f"Could not parse JSON from _select_highlights: {text!r}")
+
+        return data  # type: ignore[return-value]
 
     def _render_html(self, context: dict[str, Any]) -> str:
         raise NotImplementedError
