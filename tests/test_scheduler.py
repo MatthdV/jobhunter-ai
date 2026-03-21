@@ -333,6 +333,68 @@ class TestRunOnce:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Slice 33 — _respond_phase
+# ---------------------------------------------------------------------------
+
+
+class TestRespondPhase:
+    async def test_respond_phase_returns_zero_without_email_handler(self) -> None:
+        scheduler = make_scheduler()
+        # No email_handler injected → should return 0 without error
+        count = await scheduler._respond_phase()
+        assert count == 0
+
+    async def test_respond_phase_handles_gmail_replies(self) -> None:
+        from src.communications.email_handler import EmailMessage
+
+        with get_session() as session:
+            job = make_matched_job(url="https://example.com/job/resp")
+            session.add(job)
+            session.flush()
+            app = Application(
+                job_id=job.id,
+                cv_path="/tmp/cv.pdf",
+                cover_letter="letter",
+                status=ApplicationStatus.SUBMITTED,
+                gmail_thread_id="thread_test",
+            )
+            session.add(app)
+            session.flush()
+            app_id = app.id
+
+        msg = EmailMessage(
+            thread_id="thread_test",
+            message_id="msg001",
+            sender="recruiter@acme.com",
+            subject="Re: Application",
+            body="We would like to invite you for an interview.",
+            received_at=__import__("datetime").datetime(2026, 3, 21, 10, 0, 0),
+        )
+        mock_email = MagicMock()
+        mock_email.get_unread_replies = AsyncMock(return_value=[msg])
+        mock_email.mark_as_read = AsyncMock()
+
+        mock_responder = MagicMock()
+        mock_responder.handle = AsyncMock(return_value="Draft reply")
+
+        mock_telegram = MagicMock()
+        mock_telegram.notify_reply_received = AsyncMock()
+
+        scheduler = make_scheduler(telegram=mock_telegram)
+        scheduler._email_handler = mock_email
+        scheduler._responder = mock_responder
+
+        count = await scheduler._respond_phase()
+
+        assert count == 1
+        mock_email.mark_as_read.assert_called_once_with("msg001")
+
+        with get_session() as session:
+            app = session.get(Application, app_id)
+            assert app.status == ApplicationStatus.REPLIED
+
+
 class TestRunLoop:
     async def test_run_loop_calls_run_once_then_sleeps(self) -> None:
         run_count = 0
