@@ -1,0 +1,49 @@
+candidate:
+  name: Test Candidate
+  title: Automation Engineer
+  location: Full Remote
+
+skills:
+  top_3: [n8n, Python, RevOps]
+  additional: [LangChain, Docker]
+  tech_stack: {}
+
+experiences:
+  - id: exp_acme_automation
+    company: Acme Corp
+    title: Automation Engineer
+    start: "2022-01"
+    end: null
+    location: Remote
+    bullets:
+      - "Built n8n workflows saving 40% manual work"
+      - "Integrated 5 APIs for CRM automation"
+  - id: exp_beta_revops
+    company: Beta Inc
+    title: RevOps Consultant
+    start: "2020-06"
+    end: "2021-12"
+    location: Remote
+    bullets:
+      - "Deployed HubSpot pipeline automation"
+      - "Reduced sales cycle by 3 weeks"
+  - id: exp_gamma_ai
+    company: Gamma
+    title: AI Engineer
+    start: "2019-01"
+    end: "2020-05"
+    location: Remote
+    bullets:
+      - "Built RAG pipeline with LangChain"
+
+education:
+  - institution: Some University
+    degree: Master Computer Science
+    start: "2015"
+    end: "2017"
+
+projects:
+  - id: proj_test
+    name: Test Project
+    description: "A test automation project"
+    url: null
