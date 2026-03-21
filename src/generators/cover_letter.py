@@ -52,7 +52,28 @@ class CoverLetterGenerator:
         return next(block.text for block in response.content if hasattr(block, "text"))
 
     async def refine(self, application: Application, feedback: str) -> str:
-        raise NotImplementedError
+        """Refine an existing cover letter based on human feedback."""
+        if application.cover_letter is None:
+            raise ValueError("application.cover_letter is None — generate a letter first")
+
+        prompt = (
+            f"{self._build_prompt(application.job)}\n\n"
+            "---\n"
+            "EXISTING LETTER:\n"
+            f"{application.cover_letter}\n\n"
+            "---\n"
+            "FEEDBACK:\n"
+            f"{feedback}\n\n"
+            "---\n"
+            "Revise the letter above according to the feedback. "
+            "Keep the same language, length, and tone constraints."
+        )
+        response = await self._client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=_CL_MAX_TOKENS,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return next(block.text for block in response.content if hasattr(block, "text"))
 
     def _build_prompt(self, job: Job) -> str:
         """Build the generation prompt from job data and candidate profile."""
@@ -82,7 +103,8 @@ class CoverLetterGenerator:
             f"{description}\n\n"
             "---\n"
             f"Write entirely in {lang_str}.\n"
-            "Open with a concrete hook tied to the company's product or challenge — no generic opener.\n"
+            "Open with a concrete hook tied to the company's product or challenge"
+            " — no generic opener.\n"
             "Highlight 2–3 experiences with measurable outcomes.\n"
             "End with a direct call-to-action. No hollow enthusiasm.\n"
             f"Never use the following words: {forbidden}.\n"
