@@ -115,3 +115,21 @@ class TestCVGeneratorFallback:
         assert "skill_ids" in called_with
         assert called_with["skill_ids"] == []   # fallback: no highlights
         assert called_with["hook"] == ""
+
+
+class TestCVGeneratorRenderHtml:
+    def test_render_html_includes_candidate_name(self, cv_generator: "CVGenerator") -> None:
+        import yaml
+        profile = yaml.safe_load(_TEST_PROFILE.read_text())
+        context: dict[str, Any] = {
+            "candidate": profile["candidate"],
+            "experiences": profile["experiences"][:2],
+            "skills_all": ["n8n", "Python"],
+            "skill_ids": ["n8n"],
+            "education": profile.get("education", []),
+            "projects": profile.get("projects", []),
+            "hook": "Great fit for this role.",
+        }
+        html = cv_generator._render_html(context)
+        assert "Test Candidate" in html
+        assert "<strong>n8n</strong>" in html

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #111; margin: 0; padding: 24pt; }
+  h1 { font-size: 20pt; margin: 0 0 4pt; }
+  .subtitle { font-size: 12pt; color: #444; margin: 0 0 12pt; }
+  h2 { font-size: 12pt; text-transform: uppercase; letter-spacing: 1pt;
+       border-bottom: 1pt solid #ccc; margin: 16pt 0 6pt; padding-bottom: 2pt; }
+  .exp-header { font-weight: bold; margin-top: 8pt; }
+  .exp-meta { font-size: 10pt; color: #555; margin: 1pt 0 3pt; }
+  ul { margin: 4pt 0; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  .skills { font-size: 10pt; line-height: 1.6; }
+  .hook { font-style: italic; color: #333; margin-bottom: 10pt; border-left: 3pt solid #ccc; padding-left: 8pt; }
+</style>
+</head>
+<body>
+
+<h1>{{ candidate.name }}</h1>
+<div class="subtitle">{{ candidate.title }}{% if candidate.location %} — {{ candidate.location }}{% endif %}</div>
+
+{% if hook %}
+<div class="hook">{{ hook }}</div>
+{% endif %}
+
+{% if experiences %}
+<h2>Expériences</h2>
+{% for exp in experiences %}
+<div class="exp-header">{{ exp.title }} — {{ exp.company }}</div>
+<div class="exp-meta">
+  {{ exp.start or '' }}{% if exp.end %} → {{ exp.end }}{% else %} → présent{% endif %}
+  {% if exp.location %} · {{ exp.location }}{% endif %}
+</div>
+{% if exp.bullets %}
+<ul>{% for b in exp.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if skills_all %}
+<h2>Compétences</h2>
+<div class="skills">
+{% for skill in skills_all %}{% if not loop.first %}, {% endif %}{% if skill in skill_ids %}<strong>{{ skill }}</strong>{% else %}{{ skill }}{% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if education %}
+<h2>Formation</h2>
+{% for edu in education %}
+<div class="exp-header">{{ edu.degree }} — {{ edu.institution }}</div>
+<div class="exp-meta">{{ edu.start or '' }}{% if edu.end %} → {{ edu.end }}{% endif %}</div>
+{% endfor %}
+{% endif %}
+
+{% if projects %}
+<h2>Projets</h2>
+{% for proj in projects %}
+<div class="exp-header">{{ proj.name }}</div>
+<div>{{ proj.description }}</div>
+{% if proj.url %}<div class="exp-meta">{{ proj.url }}</div>{% endif %}
+{% endfor %}
+{% endif %}
+
+</body>
+</html>
