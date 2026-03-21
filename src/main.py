@@ -153,5 +153,35 @@ def import_linkedin(
         raise typer.Exit(1)
 
 
+@app.command("run-once")
+def run_once_cmd() -> None:
+    """Execute a single full pipeline cycle (scan → match → apply → respond)."""
+    import asyncio
+
+    from src.scheduler.job_scheduler import JobScheduler
+
+    console.print("[bold]Running[/bold] pipeline (single cycle)…")
+    scheduler = JobScheduler()
+    asyncio.run(scheduler.run_once())
+    console.print("[green]Done.[/green]")
+
+
+@app.command("run-loop")
+def run_loop_cmd(
+    interval: int = typer.Option(3600, "--interval", "-i", help="Seconds between cycles."),
+) -> None:
+    """Run the pipeline on a recurring schedule (Ctrl+C to stop)."""
+    import asyncio
+
+    from src.scheduler.job_scheduler import JobScheduler
+
+    console.print(f"[bold]Starting[/bold] pipeline loop (interval={interval}s)…")
+    scheduler = JobScheduler()
+    try:
+        asyncio.run(scheduler.run_loop(interval=interval))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped.[/yellow]")
+
+
 if __name__ == "__main__":
     app()
