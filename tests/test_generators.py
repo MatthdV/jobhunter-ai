@@ -146,3 +146,28 @@ class TestCVGeneratorHtmlToPdf:
         assert result == output_path
         assert output_path.exists()
         assert output_path.stat().st_size > 0
+
+
+class TestCVGeneratorGenerate:
+    @pytest.mark.weasyprint
+    @pytest.mark.asyncio
+    async def test_generate_returns_existing_pdf_path(
+        self, cv_generator: "CVGenerator", tmp_path: Path
+    ) -> None:
+        pdf_path = await cv_generator.generate(make_job(), tmp_path)
+        assert pdf_path.exists()
+        assert pdf_path.suffix == ".pdf"
+        assert pdf_path.stat().st_size > 0
+        assert "automation_engineer" in pdf_path.name
+        assert "acme_corp" in pdf_path.name
+
+    @pytest.mark.asyncio
+    async def test_generate_output_filename_slugified(
+        self, cv_generator: "CVGenerator", tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cv_generator._html_to_pdf = lambda html, path: (path.write_bytes(b"%PDF"), path)[1]  # type: ignore[method-assign]
+        pdf_path = await cv_generator.generate(
+            make_job(title="Lead RevOps / Data Engineer", company="Acme Corp"), tmp_path
+        )
+        assert " " not in pdf_path.name
+        assert "/" not in pdf_path.name
