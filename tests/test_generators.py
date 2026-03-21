@@ -231,3 +231,38 @@ class TestCoverLetterDetectLanguage:
     ) -> None:
         job = make_job(description="")
         assert cl_generator._detect_language(job) == "fr"
+
+
+class TestCoverLetterBuildPrompt:
+    def test_build_prompt_contains_forbidden_words_instruction(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job()
+        prompt = cl_generator._build_prompt(job)
+        assert "holistique" in prompt
+        assert "synergique" in prompt
+        assert "Never use" in prompt or "never use" in prompt.lower()
+
+    def test_build_prompt_includes_job_title_and_company(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(title="Senior RevOps Engineer", company="Qonto")
+        prompt = cl_generator._build_prompt(job)
+        assert "Senior RevOps Engineer" in prompt
+        assert "Qonto" in prompt
+
+    def test_build_prompt_contains_language_instruction_french(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(description="Nous recherchons un ingénieur pour rejoindre notre équipe.")
+        prompt = cl_generator._build_prompt(job)
+        assert "French" in prompt or "french" in prompt.lower()
+
+    def test_build_prompt_contains_language_instruction_english(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(
+            description="We are looking for an engineer to join our team and build automation workflows."
+        )
+        prompt = cl_generator._build_prompt(job)
+        assert "English" in prompt or "english" in prompt.lower()

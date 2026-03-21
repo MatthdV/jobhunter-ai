@@ -49,7 +49,39 @@ class CoverLetterGenerator:
         raise NotImplementedError
 
     def _build_prompt(self, job: Job) -> str:
-        raise NotImplementedError
+        """Build the generation prompt from job data and candidate profile."""
+        lang = self._detect_language(job)
+        lang_str = "French" if lang == "fr" else "English"
+
+        candidate = self._profile.get("candidate", {})
+        experiences = self._profile.get("experiences", [])[:3]
+        skills_top: list[str] = self._profile.get("skills", {}).get("top_3", [])
+
+        exp_lines = ""
+        for exp in experiences:
+            bullets = exp.get("bullets", [])[:2]
+            bullet_text = "\n".join(f"  - {b}" for b in bullets)
+            exp_lines += f"- {exp['title']} @ {exp['company']}\n{bullet_text}\n"
+
+        company_name = job.company.name if job.company else "unknown"
+        description = (job.description or "")[:1500]
+        forbidden = ", ".join(sorted(_FORBIDDEN_WORDS))
+
+        return (
+            f"## Candidate: {candidate.get('name', '')} — {candidate.get('title', '')}\n"
+            f"Top skills: {', '.join(skills_top)}\n\n"
+            "## Relevant experiences:\n"
+            f"{exp_lines}\n"
+            f"## Job: {job.title} at {company_name}\n"
+            f"{description}\n\n"
+            "---\n"
+            f"Write entirely in {lang_str}.\n"
+            "Open with a concrete hook tied to the company's product or challenge — no generic opener.\n"
+            "Highlight 2–3 experiences with measurable outcomes.\n"
+            "End with a direct call-to-action. No hollow enthusiasm.\n"
+            f"Never use the following words: {forbidden}.\n"
+            "Target length: 300–400 words."
+        )
 
     def _detect_language(self, job: Job) -> Literal["fr", "en"]:
         """Detect whether the job posting is in French or English."""
