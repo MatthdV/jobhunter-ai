@@ -52,4 +52,13 @@ class CoverLetterGenerator:
         raise NotImplementedError
 
     def _detect_language(self, job: Job) -> Literal["fr", "en"]:
-        raise NotImplementedError
+        """Detect whether the job posting is in French or English."""
+        description = job.description or ""
+        if not description.strip():
+            return "fr"
+        tokens = [re.sub(r"[^a-z]", "", t) for t in description.lower().split()]
+        tokens = [t for t in tokens if t]
+        if not tokens:
+            return "fr"
+        en_count = sum(1 for t in tokens if t in _ENGLISH_FUNCTION_WORDS)
+        return "en" if (en_count / len(tokens)) > _ENGLISH_THRESHOLD else "fr"

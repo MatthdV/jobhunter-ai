@@ -189,3 +189,45 @@ class TestCoverLetterGeneratorInit:
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             from src.generators.cover_letter import CoverLetterGenerator
             CoverLetterGenerator()
+
+
+@pytest.fixture
+def cl_generator(monkeypatch: pytest.MonkeyPatch) -> "CoverLetterGenerator":
+    monkeypatch.setattr(
+        "src.generators.cover_letter.settings",
+        MagicMock(anthropic_api_key="test-key", anthropic_model="claude-opus-4-6"),
+    )
+    monkeypatch.setattr("src.generators.cover_letter._PROFILE_PATH", _TEST_PROFILE)
+    with patch("anthropic.AsyncAnthropic"):
+        from src.generators.cover_letter import CoverLetterGenerator
+        return CoverLetterGenerator()
+
+
+class TestCoverLetterDetectLanguage:
+    def test_detect_language_returns_fr_for_french_job(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(
+            description=(
+                "Nous recherchons un ingénieur en automatisation pour rejoindre notre équipe. "
+                "Vous serez responsable de l'automatisation des processus CRM avec n8n et Python."
+            )
+        )
+        assert cl_generator._detect_language(job) == "fr"
+
+    def test_detect_language_returns_en_for_english_job(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(
+            description=(
+                "We are looking for a senior automation engineer to join our platform team. "
+                "You will be responsible for building and maintaining our workflow automation systems."
+            )
+        )
+        assert cl_generator._detect_language(job) == "en"
+
+    def test_detect_language_defaults_to_fr_for_empty_description(
+        self, cl_generator: "CoverLetterGenerator"
+    ) -> None:
+        job = make_job(description="")
+        assert cl_generator._detect_language(job) == "fr"
