@@ -1,9 +1,15 @@
 """Tests for scrapers — Phase 1."""
 
+import json
 from dataclasses import fields
+from datetime import UTC
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from bs4 import BeautifulSoup, Tag
 
+from src.scrapers.base import WORKING_DAYS_PER_YEAR, BaseScraper, _TokenBucket
 from src.scrapers.exceptions import (
     AuthenticationError,
     ParseError,
@@ -11,11 +17,15 @@ from src.scrapers.exceptions import (
     ScraperError,
 )
 from src.scrapers.filters import ScraperFilters
-
+from src.scrapers.indeed import IndeedScraper
+from src.scrapers.linkedin import LinkedInScraper
+from src.scrapers.wttj import WTTJScraper
+from src.storage.models import Job
 
 # ---------------------------------------------------------------------------
 # Task 1 — Exceptions
 # ---------------------------------------------------------------------------
+
 
 class TestExceptions:
     def test_scraper_error_is_base(self) -> None:
@@ -40,6 +50,7 @@ class TestExceptions:
 # ---------------------------------------------------------------------------
 # Task 1 — ScraperFilters
 # ---------------------------------------------------------------------------
+
 
 class TestScraperFilters:
     def test_default_values(self) -> None:
@@ -77,9 +88,6 @@ class TestScraperFilters:
 # ---------------------------------------------------------------------------
 # Task 2 — BaseScraper normalization + salary parsing
 # ---------------------------------------------------------------------------
-
-from src.scrapers.base import BaseScraper, WORKING_DAYS_PER_YEAR
-from src.storage.models import Job
 
 
 class _ConcreteScraper(BaseScraper):
@@ -171,12 +179,11 @@ class TestNormalize:
         assert result.title == "Senior Dev"
 
     def test_scraped_at_is_set(self) -> None:
-        from datetime import timezone
         job = self._make_job()
         result = self.scraper._normalize(job, self.filters)
         assert result is not None
         assert result.scraped_at is not None
-        assert result.scraped_at.tzinfo == timezone.utc
+        assert result.scraped_at.tzinfo == UTC
 
     def test_source_set_from_class_attribute(self) -> None:
         job = self._make_job(source="")
@@ -247,8 +254,6 @@ class TestNormalize:
 # ---------------------------------------------------------------------------
 # Task 3 — BaseScraper deduplication + search() wiring
 # ---------------------------------------------------------------------------
-
-from unittest.mock import AsyncMock, patch
 
 
 class _DupScraper(_ConcreteScraper):
@@ -328,11 +333,6 @@ class TestSearchDeduplication:
 # Task 5 — WTTJScraper
 # ---------------------------------------------------------------------------
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-from src.scrapers.wttj import WTTJScraper
 
 WTTJ_FIXTURES = Path(__file__).parent / "fixtures" / "wttj"
 
@@ -347,7 +347,6 @@ class TestWTTJParseRaw:
     def setup_method(self) -> None:
         self.scraper = WTTJScraper.__new__(WTTJScraper)
         self.scraper.headless = True
-        from src.scrapers.base import _TokenBucket
         self.scraper._token_bucket = _TokenBucket(120, 120 / 3600)
 
     @pytest.mark.asyncio
@@ -480,9 +479,6 @@ class TestWTTJSearch:
 # Task 6 — IndeedScraper
 # ---------------------------------------------------------------------------
 
-from bs4 import BeautifulSoup, Tag
-
-from src.scrapers.indeed import IndeedScraper
 
 INDEED_FIXTURES = Path(__file__).parent / "fixtures" / "indeed"
 
@@ -497,7 +493,6 @@ class TestIndeedParseRaw:
     def setup_method(self) -> None:
         self.scraper = IndeedScraper.__new__(IndeedScraper)
         self.scraper.headless = True
-        from src.scrapers.base import _TokenBucket
         self.scraper._token_bucket = _TokenBucket(60, 60 / 3600)
 
     @pytest.mark.asyncio
@@ -591,8 +586,6 @@ class TestIndeedSearch:
 # Task 7 — LinkedInScraper
 # ---------------------------------------------------------------------------
 
-from src.scrapers.linkedin import LinkedInScraper
-from src.scrapers.exceptions import AuthenticationError
 
 LINKEDIN_FIXTURES = Path(__file__).parent / "fixtures" / "linkedin"
 
@@ -605,7 +598,6 @@ class TestLinkedInParseRaw:
     def setup_method(self) -> None:
         self.scraper = LinkedInScraper.__new__(LinkedInScraper)
         self.scraper.headless = True
-        from src.scrapers.base import _TokenBucket
         self.scraper._token_bucket = _TokenBucket(30, 30 / 3600)
 
     @pytest.mark.asyncio
@@ -622,6 +614,8 @@ class TestLinkedInParseRaw:
         assert job.source == "linkedin"
         assert job.salary_raw is not None
         assert "automation" in (job.description or "").lower()
+        assert job.contract_type is not None
+        assert job.location is not None
 
     @pytest.mark.asyncio
     async def test_parse_missing_salary(self) -> None:
@@ -655,16 +649,17 @@ class TestLinkedInParseRaw:
 class TestLinkedInAuth:
     @pytest.mark.asyncio
     async def test_missing_credentials_raises_authentication_error(self) -> None:
-        from unittest.mock import AsyncMock
         scraper = LinkedInScraper()
         mock_page = AsyncMock()
         mock_page.query_selector = AsyncMock(return_value=None)
 
-        with patch.dict("os.environ", {}, clear=True):
-            with patch.object(scraper, "_is_authenticated", return_value=False):
-                with patch.object(scraper, "_has_credentials", return_value=False):
-                    with pytest.raises(AuthenticationError):
-                        await scraper._authenticate(mock_page)
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(scraper, "_is_authenticated", return_value=False),
+            patch.object(scraper, "_has_credentials", return_value=False),
+            pytest.raises(AuthenticationError),
+        ):
+            await scraper._authenticate(mock_page)
 
     @pytest.mark.asyncio
     async def test_cookie_load_skips_login(self) -> None:
@@ -680,11 +675,17 @@ class TestLinkedInAuth:
         scraper = LinkedInScraper()
         mock_page = AsyncMock()
 
-        with patch.object(scraper, "_is_authenticated", return_value=False):
-            with patch.object(scraper, "_has_credentials", return_value=True):
-                with patch.object(scraper, "_run_login", side_effect=AuthenticationError("2FA challenge")):
-                    with pytest.raises(AuthenticationError, match="2FA"):
-                        await scraper._authenticate(mock_page)
+        with (
+            patch.object(scraper, "_is_authenticated", return_value=False),
+            patch.object(scraper, "_has_credentials", return_value=True),
+            patch.object(
+                scraper,
+                "_run_login",
+                side_effect=AuthenticationError("2FA challenge"),
+            ),
+            pytest.raises(AuthenticationError, match="2FA"),
+        ):
+            await scraper._authenticate(mock_page)
 
 
 class TestLinkedInSearch:
@@ -756,3 +757,151 @@ class TestLinkedInSearch:
                 seen_urls={"https://www.linkedin.com/jobs/view/1111111111/"},
             )
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Task 8 — _TokenBucket + _with_retry
+# ---------------------------------------------------------------------------
+
+
+class TestTokenBucket:
+    def test_initializes_with_full_capacity(self) -> None:
+        bucket = _TokenBucket(capacity=10, rate=1.0)
+        assert bucket._tokens == 10.0
+        assert bucket._capacity == 10.0
+        assert bucket._rate == 1.0
+
+    @pytest.mark.asyncio
+    async def test_acquire_decrements_one_token(self) -> None:
+        bucket = _TokenBucket(capacity=10, rate=1.0)
+        await bucket.acquire()
+        assert bucket._tokens == 9.0
+
+    @pytest.mark.asyncio
+    async def test_full_bucket_does_not_sleep(self) -> None:
+        bucket = _TokenBucket(capacity=10, rate=1.0)
+        with patch("asyncio.sleep") as mock_sleep:
+            await bucket.acquire()
+        mock_sleep.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_bucket_sleeps_until_refill(self) -> None:
+        """When the bucket is empty, acquire() must call asyncio.sleep."""
+        sleep_called = False
+
+        async def fake_sleep(duration: float) -> None:
+            nonlocal sleep_called
+            sleep_called = True
+            # Simulate time passing: inject tokens so the loop can exit
+            bucket._tokens = 1.0
+
+        bucket = _TokenBucket(capacity=1, rate=1.0 / 3600)
+        await bucket.acquire()  # consume the single token
+
+        with patch("asyncio.sleep", side_effect=fake_sleep):
+            await bucket.acquire()
+
+        assert sleep_called
+
+
+class TestWithRetry:
+    def setup_method(self) -> None:
+        self.scraper = _ConcreteScraper()
+
+    @pytest.mark.asyncio
+    async def test_succeeds_on_first_attempt(self) -> None:
+        async def coro() -> str:
+            return "ok"
+
+        result = await self.scraper._with_retry(coro)
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_recovers_on_second_attempt(self) -> None:
+        call_count = 0
+
+        async def flaky_coro() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("transient")
+            return "recovered"
+
+        with patch("asyncio.sleep"):
+            result = await self.scraper._with_retry(flaky_coro, max_attempts=3)
+
+        assert result == "recovered"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_none_after_max_attempts(self) -> None:
+        call_count = 0
+
+        async def always_fails() -> str:
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("boom")
+
+        with patch("asyncio.sleep"):
+            result = await self.scraper._with_retry(always_fails, max_attempts=3)
+
+        assert result is None
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_parse_error_raises_immediately_without_retry(self) -> None:
+        async def coro() -> str:
+            raise ParseError("bad html")
+
+        with (
+            patch("asyncio.sleep") as mock_sleep,
+            pytest.raises(ParseError, match="bad html"),
+        ):
+            await self.scraper._with_retry(coro)
+
+        mock_sleep.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_retries_and_returns_none(self) -> None:
+        call_count = 0
+
+        async def rate_limited() -> str:
+            nonlocal call_count
+            call_count += 1
+            raise RateLimitError("429")
+
+        with patch("asyncio.sleep"):
+            result = await self.scraper._with_retry(rate_limited, max_attempts=3)
+
+        assert result is None
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_backoff_doubles_between_retries(self) -> None:
+        """Backoff: 1s after attempt 1, 2s after attempt 2."""
+        sleep_durations: list[float] = []
+
+        async def track_sleep(duration: float) -> None:
+            sleep_durations.append(duration)
+
+        async def always_fails() -> str:
+            raise Exception("fail")
+
+        with patch("asyncio.sleep", side_effect=track_sleep):
+            await self.scraper._with_retry(always_fails, max_attempts=3)
+
+        assert sleep_durations == [1.0, 2.0]
+
+    @pytest.mark.asyncio
+    async def test_coro_fn_called_fresh_per_retry(self) -> None:
+        """coro_fn must be a callable — each retry calls coro_fn() for a fresh coroutine."""
+        call_log: list[int] = []
+
+        async def track_calls() -> str:
+            call_log.append(1)
+            raise Exception("retry me")
+
+        with patch("asyncio.sleep"):
+            await self.scraper._with_retry(track_calls, max_attempts=3)
+
+        assert len(call_log) == 3
