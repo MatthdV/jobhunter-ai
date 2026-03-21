@@ -171,3 +171,21 @@ class TestCVGeneratorGenerate:
         )
         assert " " not in pdf_path.name
         assert "/" not in pdf_path.name
+
+
+# ---------------------------------------------------------------------------
+# CoverLetterGenerator tests
+# ---------------------------------------------------------------------------
+
+
+class TestCoverLetterGeneratorInit:
+    def test_init_raises_configuration_error_without_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "src.generators.cover_letter.settings",
+            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6"),
+        )
+        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
+            from src.generators.cover_letter import CoverLetterGenerator
+            CoverLetterGenerator()
