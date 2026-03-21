@@ -2,6 +2,8 @@
 """JobHunter AI — Semi-autonomous job search CLI."""
 
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 
@@ -69,6 +71,24 @@ def init_db_cmd() -> None:
     else:
         console.print("[red]Database initialised but health check failed.[/red]")
         raise typer.Exit(code=1)
+
+
+@app.command("import-linkedin")
+def import_linkedin(
+    zip_path: Path = typer.Argument(..., help="Path to the LinkedIn data export ZIP."),
+) -> None:
+    """Bootstrap profile.yaml with experience data from a LinkedIn export ZIP."""
+    from src.importers.linkedin_importer import LinkedInImporter
+    from src.config.settings import settings  # noqa: F401 — ensures .env loaded
+
+    profile_path = Path(__file__).parent / "config" / "profile.yaml"
+    console.print(f"[bold]Importing[/bold] LinkedIn data from {zip_path}…")
+    try:
+        LinkedInImporter().import_zip(zip_path, profile_path)
+        console.print("[green]Done.[/green] profile.yaml updated.")
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
