@@ -139,7 +139,16 @@ class TestMatchResult:
 
 
 class TestScorer:
-    pass  # filled in incrementally
+    def test_init_raises_configuration_error_without_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Scorer.__init__ raises ConfigurationError when API key is empty."""
+        monkeypatch.setattr(
+            "src.matching.scorer.settings",
+            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6", min_match_score=80),
+        )
+        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
+            Scorer()
 
 
 class TestEmbeddingMatcher:
