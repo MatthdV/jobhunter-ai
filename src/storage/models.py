@@ -88,7 +88,7 @@ class Job(Base):
     contract_type = Column(String(50))             # CDI, Freelance, Contract…
     match_score = Column(Float, nullable=True)     # 0–100, set by Scorer
     match_reasoning = Column(Text, nullable=True)  # Claude explanation
-    status = Column(SAEnum(JobStatus), default=JobStatus.NEW, nullable=False)
+    status: Column[str] = Column(SAEnum(JobStatus), default=JobStatus.NEW, nullable=False)
     scraped_at = Column(DateTime, default=datetime.utcnow)
 
     company = relationship("Company", back_populates="jobs")
@@ -106,7 +106,7 @@ class Application(Base):
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     cv_path = Column(String(500))                  # Path to generated PDF
     cover_letter = Column(Text)                    # Generated text
-    status = Column(SAEnum(ApplicationStatus), default=ApplicationStatus.DRAFT, nullable=False)
+    status: Column[str] = Column(SAEnum(ApplicationStatus), default=ApplicationStatus.DRAFT, nullable=False)
     submitted_at = Column(DateTime, nullable=True)
     recruiter_id = Column(Integer, ForeignKey("recruiters.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)  # For tracking replies

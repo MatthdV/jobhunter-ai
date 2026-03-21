@@ -19,7 +19,7 @@ from src.storage.models import Job
 
 logger = logging.getLogger(__name__)
 
-_COOKIES_PATH = Path("data/linkedin_cookies.json")
+_COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
 _SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}&f_WT=2"
 _LI_BASE = "https://www.linkedin.com"
 
@@ -57,12 +57,12 @@ class LinkedInScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     async def _setup(self) -> None:
-        Path("data").mkdir(exist_ok=True)
+        _COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         self._playwright_ctx = await async_playwright().start()
 
         try:
-            from playwright_stealth import stealth_async  # type: ignore[import]
+            from playwright_stealth import stealth_async
             self._stealth_fn = stealth_async
         except ImportError:
             logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
@@ -222,7 +222,15 @@ class LinkedInScraper(BaseScraper):
             if not title:
                 raise ParseError(f"Missing title in LinkedIn detail page for {url}")
 
-            location_el = soup.select_one(".jobs-unified-top-card__bullet")
+            # First bullet = contract type (e.g. "CDI"), second = location (e.g. "Paris · Remote")
+            contract_el = soup.select_one(".jobs-unified-top-card__bullet")
+            contract_type: str | None = (
+                contract_el.get_text(strip=True) if contract_el else None
+            )
+
+            location_el = soup.select_one(
+                ".jobs-unified-top-card__bullet ~ .jobs-unified-top-card__bullet"
+            )
             location_str: str | None = (
                 location_el.get_text(strip=True) if location_el else None
             )
@@ -239,13 +247,6 @@ class LinkedInScraper(BaseScraper):
                 description_el.get_text(separator=" ", strip=True)
                 if description_el
                 else None
-            )
-
-            contract_el = soup.select_one(
-                ".jobs-unified-top-card__bullet ~ .jobs-unified-top-card__bullet"
-            )
-            contract_type: str | None = (
-                contract_el.get_text(strip=True) if contract_el else None
             )
 
             return Job(
