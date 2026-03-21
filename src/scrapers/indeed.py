@@ -112,7 +112,7 @@ class IndeedScraper(BaseScraper):
             title: str = (title_el.get_text(strip=True) if title_el else "") or ""
 
             link_el = raw.select_one(".jobTitle a[data-jk]")
-            job_key = link_el["data-jk"] if link_el else ""  # type: ignore[index]
+            job_key = link_el["data-jk"] if link_el else ""
             # Always use the canonical /viewjob URL — the href is a tracking redirect
             url = f"https://fr.indeed.com/viewjob?jk={job_key}" if job_key else ""
 
@@ -126,7 +126,9 @@ class IndeedScraper(BaseScraper):
             salary_raw_str: str | None = salary_el.get_text(strip=True) if salary_el else None
 
             snippet_el = raw.select_one(".job-snippet")
-            description: str | None = snippet_el.get_text(separator=" ", strip=True) if snippet_el else None
+            description: str | None = (
+                snippet_el.get_text(separator=" ", strip=True) if snippet_el else None
+            )
 
             return Job(
                 title=title,

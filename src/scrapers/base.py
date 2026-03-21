@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from src.scrapers.filters import ScraperFilters
@@ -79,7 +79,7 @@ class BaseScraper(ABC):
             job = await self._parse_raw(raw)
             if job.url in db_seen or job.url in batch_seen:
                 continue
-            batch_seen.add(job.url)
+            batch_seen.add(job.url)  # type: ignore[arg-type]
             normalised = self._normalize(job, effective_filters)
             if normalised is not None:
                 results.append(normalised)
@@ -127,19 +127,19 @@ class BaseScraper(ABC):
         job.title = job.title.strip().title()
 
         # Source
-        job.source = self.source
+        job.source = self.source  # type: ignore[assignment]
 
         # Timestamp — never use deprecated utcnow()
-        job.scraped_at = datetime.now(timezone.utc)
+        job.scraped_at = datetime.now(UTC)  # type: ignore[assignment]
 
         # is_remote detection
         haystack = " ".join(
             filter(
                 None,
-                [job.title or "", job.location or "", job.description or ""],
+                [str(job.title or ""), str(job.location or ""), str(job.description or "")],
             )
         ).lower()
-        job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)
+        job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)  # type: ignore[assignment]
 
         # Salary parsing — only when not already set (WTTJ provides structured values)
         if job.salary_min is None and job.salary_max is None and job.salary_raw:
@@ -263,17 +263,17 @@ class BaseScraper(ABC):
     # Lifecycle — override in concrete scrapers as needed
     # ------------------------------------------------------------------
 
-    async def _setup(self) -> None:
+    async def _setup(self) -> None:  # noqa: B027
         """Initialise browser / HTTP session. Called by __aenter__."""
 
-    async def _teardown(self) -> None:
+    async def _teardown(self) -> None:  # noqa: B027
         """Release resources. Called by __aexit__."""
 
     # ------------------------------------------------------------------
     # Context manager protocol
     # ------------------------------------------------------------------
 
-    async def __aenter__(self) -> "BaseScraper":
+    async def __aenter__(self) -> BaseScraper:
         await self._setup()
         return self
 
