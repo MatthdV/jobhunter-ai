@@ -127,3 +127,27 @@ filters:
     - internship
     - stagiaire
     - alternance
+
+# ---------------------------------------------------------------------------
+# Work experience — source of truth for CV generation
+# Populated by: python -m src.main import-linkedin <zip>
+# ---------------------------------------------------------------------------
+experiences:
+  - id: exp_placeholder
+    company: "À compléter via import-linkedin"
+    title: "Automation & AI Engineer"
+    start: "2020-01"
+    end: null
+    location: "Full Remote"
+    bullets:
+      - "Importer votre profil LinkedIn avec: python -m src.main import-linkedin <zip>"
+
+# ---------------------------------------------------------------------------
+# Education
+# ---------------------------------------------------------------------------
+education: []
+
+# ---------------------------------------------------------------------------
+# Side projects
+# ---------------------------------------------------------------------------
+projects: []
