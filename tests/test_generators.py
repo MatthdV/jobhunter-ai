@@ -299,3 +299,33 @@ class TestCoverLetterGenerate:
         result = await cl_generator_with_mock.generate(make_job())
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+class TestCoverLetterRefine:
+    @pytest.mark.asyncio
+    async def test_refine_prompt_includes_letter_and_feedback(
+        self, cl_generator_with_mock: "CoverLetterGenerator", mock_cl_client: AsyncMock
+    ) -> None:
+        application = MagicMock()
+        application.cover_letter = "Ma lettre originale."
+        application.job = make_job()
+        feedback = "Rends le ton plus direct et mentionne n8n dès la première phrase."
+
+        result = await cl_generator_with_mock.refine(application, feedback)
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+        call_args = mock_cl_client.messages.create.call_args
+        prompt_content = call_args.kwargs["messages"][0]["content"]
+        assert "Ma lettre originale." in prompt_content
+        assert feedback in prompt_content
+
+    @pytest.mark.asyncio
+    async def test_refine_raises_if_cover_letter_is_none(
+        self, cl_generator_with_mock: "CoverLetterGenerator"
+    ) -> None:
+        application = MagicMock()
+        application.cover_letter = None
+        application.job = make_job()
+        with pytest.raises(ValueError, match="cover_letter is None"):
+            await cl_generator_with_mock.refine(application, "Some feedback")
