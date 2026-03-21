@@ -223,7 +223,7 @@ _ENGLISH_FUNCTION_WORDS: frozenset[str] = frozenset([
     "who", "what", "which", "but", "not", "or", "if", "on", "so", "all",
     "more", "also", "when", "than", "then", "into", "about", "up", "out",
 ])
-_ENGLISH_THRESHOLD: float = 0.15
+_ENGLISH_THRESHOLD: float = 0.25   # validated: FR max 0.23 (bilingual), EN min 0.36 — safe gap
 ```
 
 ### Method signatures
@@ -239,7 +239,7 @@ async def refine(self, application: Application, feedback: str) -> str: ...
 
 1. `__init__` — loads `profile.yaml`, initialises `anthropic.AsyncAnthropic`, raises `ConfigurationError` if `ANTHROPIC_API_KEY` is not set. Uses `settings.anthropic_model` for all Claude calls.
 
-2. `_detect_language(job) -> Literal["fr", "en"]` — tokenise `job.description` by whitespace, lowercase. Compute the fraction of tokens present in `_ENGLISH_FUNCTION_WORDS`. If fraction > `_ENGLISH_THRESHOLD` → `'en'`; else `'fr'`. If `job.description` is `None` or empty, default to `'fr'`.
+2. `_detect_language(job) -> Literal["fr", "en"]` — tokenise `job.description` by whitespace, lowercase, strip non-alpha. Compute the fraction of tokens present in `_ENGLISH_FUNCTION_WORDS`. If fraction > `_ENGLISH_THRESHOLD` (0.25) → `'en'`; else `'fr'`. If `job.description` is `None` or empty, default to `'fr'`. Empirically validated: French jobs (even bilingual) top at 0.23; English jobs start at 0.36.
 
 3. `_build_prompt(job) -> str` — calls `_detect_language(job)` internally to determine language. Constructs the prompt with:
    - Candidate: name, title, first 3 experiences by YAML order (title + company + first 2 bullets each), `skills["top_3"]`
