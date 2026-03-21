@@ -43,7 +43,13 @@ class CoverLetterGenerator:
         self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def generate(self, job: Job) -> str:
-        raise NotImplementedError
+        """Generate a cover letter text for the given job."""
+        response = await self._client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=_CL_MAX_TOKENS,
+            messages=[{"role": "user", "content": self._build_prompt(job)}],
+        )
+        return next(block.text for block in response.content if hasattr(block, "text"))
 
     async def refine(self, application: Application, feedback: str) -> str:
         raise NotImplementedError
