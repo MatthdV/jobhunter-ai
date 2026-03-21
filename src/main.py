@@ -47,10 +47,72 @@ def apply(
 
     Always requires explicit human approval before submission.
     """
+    import asyncio
+    from datetime import date, datetime, time as _time
+
+    from src.config.settings import settings
+    from src.generators.cover_letter import CoverLetterGenerator
+    from src.generators.cv_generator import CVGenerator
+    from src.storage.database import get_session
+    from src.storage.models import Application, ApplicationStatus, Job, JobStatus
+
     mode = "[yellow]DRY RUN[/yellow]" if dry_run else "[red]LIVE[/red]"
     target = f"job #{job_id}" if job_id else "all MATCHED jobs"
     console.print(f"[bold]Applying[/bold] to {target} ({mode})…")
-    raise NotImplementedError("Phase 3 — application generation not yet implemented")
+
+    cv_gen = CVGenerator()
+    cl_gen = CoverLetterGenerator()
+
+    output_dir = Path("data") / "cvs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_session() as session:
+        query = session.query(Job).filter(Job.status == JobStatus.MATCHED)
+        if job_id is not None:
+            query = query.filter(Job.id == job_id)
+        jobs = query.all()
+
+        # Slice 15 — daily cap: count today's submitted applications
+        today_start = datetime.combine(date.today(), _time.min)
+        today_count = (
+            session.query(Application)
+            .filter(
+                Application.created_at >= today_start,
+                Application.status == ApplicationStatus.SUBMITTED,
+            )
+            .count()
+        )
+        remaining = max(0, settings.max_applications_per_day - today_count)
+
+        # Skip jobs that already have an application
+        eligible = [j for j in jobs if j.application is None][:remaining]
+
+        if not eligible:
+            console.print("No eligible jobs to process.")
+            return
+
+        async def _run() -> list[tuple[Path, str]]:
+            results: list[tuple[Path, str]] = []
+            for job in eligible:
+                cv_path = await cv_gen.generate(job, output_dir)
+                letter = await cl_gen.generate(job)
+                results.append((cv_path, letter))
+            return results
+
+        generated = asyncio.run(_run())
+
+        for job, (cv_path, letter) in zip(eligible, generated):
+            app_record = Application(
+                job_id=job.id,
+                cv_path=str(cv_path),
+                cover_letter=letter,
+                status=ApplicationStatus.DRAFT,
+            )
+            session.add(app_record)
+
+        count = len(generated)
+
+    console.print(f"[green]Done.[/green] {count} application(s) created.")
 
 
 @app.command()
