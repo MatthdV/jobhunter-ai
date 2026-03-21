@@ -5,9 +5,9 @@ Analyze portfolio and generate insights for job search
 """
 
 import re
-from datetime import datetime
-from typing import Dict, List, Any
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -36,7 +36,7 @@ class ProfileAnalyzer:
 
     def __init__(self) -> None:
         # TODO: replace with yaml.safe_load(Path("src/config/profile.yaml").read_text())
-        self.tech_keywords: Dict[str, List[str]] = {
+        self.tech_keywords: dict[str, list[str]] = {
             'languages': ['Python', 'JavaScript', 'TypeScript', 'Go', 'Java', 'SQL', 'Bash'],
             'frameworks': ['React', 'Next.js', 'Node.js', 'Express', 'Django', 'FastAPI'],
             'cloud': ['AWS', 'GCP', 'Azure', 'Docker', 'Kubernetes', 'Terraform'],
@@ -46,7 +46,7 @@ class ProfileAnalyzer:
             'tools': ['Git', 'Linux', 'Vim', 'VS Code', 'Figma', 'Notion'],
         }
 
-        self.target_roles: List[str] = [
+        self.target_roles: list[str] = [
             'Automation Engineer',
             'AI Engineer',
             'RevOps Consultant',
@@ -66,7 +66,7 @@ class ProfileAnalyzer:
             re.compile(r'(\d{4})\s*-\s*(present|now|current)', re.IGNORECASE),
         ]
 
-    def analyze_text(self, text: str) -> Dict[str, Any]:
+    def analyze_text(self, text: str) -> dict[str, Any]:
         """Analyze text content for skills and keywords."""
         if not text or not isinstance(text, str):
             raise ValueError("text must be a non-empty string")
@@ -74,8 +74,8 @@ class ProfileAnalyzer:
         text_lower = text.lower()
 
         # Deduplicate skills by name
-        seen: set = set()
-        found_skills: List[Dict[str, str]] = []
+        seen: set[str] = set()
+        found_skills: list[dict[str, str]] = []
         for category, keywords in self.tech_keywords.items():
             for keyword in keywords:
                 if keyword.lower() in text_lower and keyword not in seen:
@@ -113,7 +113,7 @@ class ProfileAnalyzer:
 
         return 0
 
-    def generate_optimized_headline(self, current_headline: str = '') -> List[str]:
+    def generate_optimized_headline(self, current_headline: str = '') -> list[str]:
         """Generate optimized LinkedIn headline options.
 
         If current_headline is provided, it is prepended so comparison
@@ -129,7 +129,7 @@ class ProfileAnalyzer:
             return [current_headline] + suggestions
         return suggestions
 
-    def generate_about_section(self, profile_data: Dict[str, Any]) -> str:
+    def generate_about_section(self, profile_data: dict[str, Any]) -> str:
         """Generate a LinkedIn About section template from profile data.
 
         Returns a template with placeholder metrics that must be replaced
@@ -177,19 +177,19 @@ Cloud : AWS, Vercel, Docker
 """
         return about
 
-    def suggest_improvements(self, profile_data: Dict[str, Any]) -> List[Dict[str, str]]:
+    def suggest_improvements(self, profile_data: dict[str, Any]) -> list[dict[str, str]]:
         """Suggest profile improvements based on profile data."""
         if not isinstance(profile_data, dict):
             raise ValueError("profile_data must be a dict")
 
-        suggestions: List[Dict[str, str]] = []
+        suggestions: list[dict[str, str]] = []
 
         if not profile_data.get('headline') or len(profile_data['headline']) < 50:
             suggestions.append({
                 'section': 'headline',
                 'priority': 'high',
                 'issue': 'Headline trop courte ou générique',
-                'suggestion': 'Utiliser : "Automation & AI Engineer | RevOps Consultant | Building Intelligent Systems"',
+                'suggestion': 'Utiliser : "Automation & AI Engineer | RevOps Consultant | Building Intelligent Systems"',  # noqa: E501
                 'impact': 'Augmente visibilité recherche de 40%',
             })
 
@@ -225,7 +225,7 @@ Cloud : AWS, Vercel, Docker
 
         return suggestions
 
-    def generate_job_search_strategy(self) -> Dict[str, Any]:
+    def generate_job_search_strategy(self) -> dict[str, Any]:
         """Generate job search strategy."""
         return {
             'target_roles': [
@@ -278,11 +278,11 @@ def main() -> None:
     for skill in analysis['skills'][:10]:
         print(f"   • {skill['name']} ({skill['category']})")
 
-    print(f"\nIndicateurs :")
+    print("\nIndicateurs :")
     print(f"   • Mentions senior : {analysis['indicators']['senior_mentions']}")
     print(f"   • Années expérience estimées : {analysis['indicators']['years_exp']}")
 
-    print(f"\nChecks :")
+    print("\nChecks :")
     print(f"   • Portfolio présent : {'Oui' if analysis['has_portfolio'] else 'Non'}")
     print(f"   • Contact présent : {'Oui' if analysis['has_contact'] else 'Non'}")
 
@@ -296,7 +296,7 @@ def main() -> None:
     print("STRATÉGIE DE RECHERCHE")
     print("=" * 60)
     strategy = analyzer.generate_job_search_strategy()
-    print(f"\nRôles cibles :")
+    print("\nRôles cibles :")
     for role in strategy['target_roles'][:3]:
         print(f"   • {role['title']} - Match {role['match']}% - {role['salary']}")
 
