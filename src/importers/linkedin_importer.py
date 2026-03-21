@@ -119,7 +119,7 @@ class LinkedInImporter:
 
     def _parse_skills(self, csv_text: str) -> list[str]:
         reader = csv.DictReader(io.StringIO(csv_text))
-        return [row["Name"].strip() for row in reader if row.get("Name", "").strip()][:10]
+        return [row.get("Name", "").strip() for row in reader if row.get("Name", "").strip()][:10]
 
     def _parse_projects(self, csv_text: str) -> list[dict[str, Any]]:
         reader = csv.DictReader(io.StringIO(csv_text))
