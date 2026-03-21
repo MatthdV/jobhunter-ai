@@ -52,7 +52,42 @@ class CVGenerator:
         )
 
     async def generate(self, job: Job, output_dir: Path) -> Path:
-        raise NotImplementedError
+        """Generate a personalised CV PDF for the given job."""
+        try:
+            highlights = await self._select_highlights(job)
+        except Exception:
+            logger.warning("_select_highlights failed — using fallback (natural order)")
+            highlights = {
+                "experience_ids": [e["id"] for e in self._profile.get("experiences", [])],
+                "skill_ids": [],
+                "hook": "",
+            }
+
+        exp_ids: list[str] = highlights["experience_ids"][:4]
+        exp_by_id = {e["id"]: e for e in self._profile.get("experiences", [])}
+        experiences = [exp_by_id[eid] for eid in exp_ids if eid in exp_by_id]
+
+        skills = self._profile.get("skills", {})
+        skills_all: list[str] = skills.get("top_3", []) + skills.get("additional", [])
+
+        context: dict[str, Any] = {
+            "candidate": self._profile.get("candidate", {}),
+            "experiences": experiences,
+            "skills_all": skills_all,
+            "skill_ids": highlights.get("skill_ids", []),
+            "education": self._profile.get("education", []),
+            "projects": self._profile.get("projects", []),
+            "hook": highlights.get("hook", ""),
+        }
+
+        html = self._render_html(context)
+
+        company_name = job.company.name if job.company else "unknown"
+        filename = (
+            f"cv_{_slug(job.title)}_{_slug(company_name)}_{date.today().strftime('%Y%m%d')}.pdf"
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return self._html_to_pdf(html, output_dir / filename)
 
     async def _select_highlights(self, job: Job) -> dict[str, Any]:
         """Use Claude to identify which experiences and skills to emphasise."""

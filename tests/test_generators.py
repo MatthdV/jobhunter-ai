@@ -85,3 +85,33 @@ class TestCVGeneratorInit:
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             from src.generators.cv_generator import CVGenerator
             CVGenerator()
+
+
+class TestCVGeneratorFallback:
+    @pytest.mark.asyncio
+    async def test_generate_uses_fallback_when_select_highlights_raises(
+        self, cv_generator: "CVGenerator", mock_cv_client: AsyncMock, tmp_path: Path
+    ) -> None:
+        mock_cv_client.messages.create = AsyncMock(side_effect=Exception("Claude down"))
+
+        # _render_html and _html_to_pdf are still NotImplementedError at this slice.
+        # Patch them directly on the instance to isolate the fallback logic.
+        called_with: dict[str, Any] = {}
+
+        def fake_render(context: dict[str, Any]) -> str:
+            called_with.update(context)
+            return "<html>fallback</html>"
+
+        def fake_pdf(html: str, output_path: Path) -> Path:
+            output_path.write_bytes(b"%PDF fallback")
+            return output_path
+
+        cv_generator._render_html = fake_render  # type: ignore[method-assign]
+        cv_generator._html_to_pdf = fake_pdf  # type: ignore[method-assign]
+
+        await cv_generator.generate(make_job(), tmp_path)
+
+        assert "experiences" in called_with
+        assert "skill_ids" in called_with
+        assert called_with["skill_ids"] == []   # fallback: no highlights
+        assert called_with["hook"] == ""
