@@ -40,7 +40,7 @@ class EmailHandler:
         to: str,
         subject: str,
         body: str,
-        attachments: list | None = None,
+        attachments: list[str] | None = None,
         reply_to_thread: str | None = None,
     ) -> str:
         """Send an email and return the Gmail thread ID.

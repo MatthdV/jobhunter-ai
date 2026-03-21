@@ -1,19 +1,21 @@
 """SQLAlchemy ORM models for JobHunter AI."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SAEnum,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -27,7 +29,7 @@ class Base(DeclarativeBase):
 # ---------------------------------------------------------------------------
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     NEW = "new"               # Just scraped, not yet scored
     MATCHED = "matched"       # Score >= min_match_score, awaiting review
     SKIPPED = "skipped"       # Score too low or manually dismissed
@@ -36,7 +38,7 @@ class JobStatus(str, Enum):
     REJECTED = "rejected"     # Recruiter replied with rejection
 
 
-class ApplicationStatus(str, Enum):
+class ApplicationStatus(StrEnum):
     DRAFT = "draft"                       # CV/letter generated, not yet validated
     PENDING_VALIDATION = "pending_validation"  # Awaiting human approval
     SUBMITTED = "submitted"               # Sent to recruiter
@@ -106,7 +108,9 @@ class Application(Base):
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     cv_path = Column(String(500))                  # Path to generated PDF
     cover_letter = Column(Text)                    # Generated text
-    status: Column[str] = Column(SAEnum(ApplicationStatus), default=ApplicationStatus.DRAFT, nullable=False)
+    status: Column[str] = Column(
+        SAEnum(ApplicationStatus), default=ApplicationStatus.DRAFT, nullable=False
+    )
     submitted_at = Column(DateTime, nullable=True)
     recruiter_id = Column(Integer, ForeignKey("recruiters.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)  # For tracking replies

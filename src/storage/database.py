@@ -18,11 +18,11 @@ from src.storage.models import Base
 # ---------------------------------------------------------------------------
 
 _engine: Engine | None = None
-_SessionLocal: sessionmaker | None = None
+_SessionLocal: sessionmaker[Session] | None = None
 
 
 def _make_engine(url: str) -> Engine:
-    connect_args: dict = {}
+    connect_args: dict[str, bool] = {}
     if url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
     return create_engine(
@@ -54,7 +54,7 @@ def _get_engine() -> Engine:
     return _engine
 
 
-def _get_session_factory() -> sessionmaker:
+def _get_session_factory() -> sessionmaker[Session]:
     if _SessionLocal is None:
         configure()
     assert _SessionLocal is not None

@@ -2,9 +2,6 @@
 
 import pytest
 
-from src.matching.scorer import Scorer, ScoreResult
-from src.matching.embeddings import EmbeddingMatcher
-
 
 class TestScorer:
     def test_score_returns_score_result(self) -> None:

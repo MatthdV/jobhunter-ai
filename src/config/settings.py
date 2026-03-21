@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     # Scorer and CoverLetterGenerator will raise ConfigurationError at init
     # time if this is not set when AI features are actually needed.
     anthropic_api_key: str = Field("", description="Anthropic API key — required for AI features")
-    anthropic_model: str = Field("claude-opus-4-6", description="Claude model for scoring and generation")
+    anthropic_model: str = Field(
+        "claude-opus-4-6", description="Claude model for scoring and generation"
+    )
 
     # --- Gmail ---
     gmail_client_id: str = Field("", description="OAuth2 client ID")
@@ -58,4 +60,4 @@ class ConfigurationError(RuntimeError):
     """Raised when a required credential or setting is missing at feature init time."""
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

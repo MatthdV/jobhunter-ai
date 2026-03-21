@@ -1,10 +1,8 @@
 """Tests for CV and cover letter generators — Phase 3."""
 
-import pytest
 from pathlib import Path
 
-from src.generators.cv_generator import CVGenerator
-from src.generators.cover_letter import CoverLetterGenerator
+import pytest
 
 
 class TestCVGenerator:
