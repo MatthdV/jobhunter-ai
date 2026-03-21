@@ -133,3 +133,16 @@ class TestCVGeneratorRenderHtml:
         html = cv_generator._render_html(context)
         assert "Test Candidate" in html
         assert "<strong>n8n</strong>" in html
+
+
+class TestCVGeneratorHtmlToPdf:
+    @pytest.mark.weasyprint
+    def test_html_to_pdf_writes_nonempty_file(
+        self, cv_generator: "CVGenerator", tmp_path: Path
+    ) -> None:
+        html = "<html><body><p>Test CV content</p></body></html>"
+        output_path = tmp_path / "test.pdf"
+        result = cv_generator._html_to_pdf(html, output_path)
+        assert result == output_path
+        assert output_path.exists()
+        assert output_path.stat().st_size > 0

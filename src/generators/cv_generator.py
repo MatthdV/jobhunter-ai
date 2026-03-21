@@ -133,4 +133,7 @@ class CVGenerator:
         return template.render(**context)
 
     def _html_to_pdf(self, html: str, output_path: Path) -> Path:
-        raise NotImplementedError
+        """Convert an HTML string to PDF using WeasyPrint."""
+        from weasyprint import HTML  # type: ignore[import-untyped]
+        HTML(string=html).write_pdf(str(output_path))
+        return output_path
