@@ -131,7 +131,7 @@ class Scorer:
         salary = p.get("salary", {})
         filters = p.get("filters", {})
 
-        top_skills = skills.get("top", [])[:3]
+        top_skills = skills.get("top_3", [])[:3]
         tech_stack = skills.get("tech_stack", [])
 
         return (
