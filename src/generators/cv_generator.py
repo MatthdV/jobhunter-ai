@@ -128,7 +128,9 @@ class CVGenerator:
         return data  # type: ignore[return-value]
 
     def _render_html(self, context: dict[str, Any]) -> str:
-        raise NotImplementedError
+        """Render the Jinja2 CV template with the given context."""
+        template = self._jinja_env.get_template("cv.html.jinja2")
+        return template.render(**context)
 
     def _html_to_pdf(self, html: str, output_path: Path) -> Path:
         raise NotImplementedError
