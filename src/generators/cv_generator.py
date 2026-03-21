@@ -1,6 +1,7 @@
 """Personalised CV generation per job offer using Jinja2 + WeasyPrint."""
 
 from pathlib import Path
+from typing import Any
 
 from src.storage.models import Job
 
@@ -41,11 +42,11 @@ class CVGenerator:
         """
         raise NotImplementedError
 
-    async def _select_highlights(self, job: Job) -> dict:
+    async def _select_highlights(self, job: Job) -> dict[str, Any]:
         """Use Claude to identify which experiences and skills to emphasise."""
         raise NotImplementedError
 
-    def _render_html(self, context: dict) -> str:
+    def _render_html(self, context: dict[str, Any]) -> str:
         """Render the Jinja2 CV template with the given context."""
         raise NotImplementedError
 

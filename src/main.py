@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """JobHunter AI — Semi-autonomous job search CLI."""
 
-from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
 app = typer.Typer(
     name="jobhunter",
@@ -17,7 +15,7 @@ console = Console()
 
 @app.command()
 def scan(
-    sources: list[str] = typer.Option(
+    sources: list[str] = typer.Option(  # noqa: B008
         ["linkedin", "indeed", "wttj"],
         "--source", "-s",
         help="Job boards to scrape.",
@@ -40,7 +38,7 @@ def match(
 
 @app.command()
 def apply(
-    job_id: Optional[int] = typer.Argument(None, help="Job ID to apply to (omit = all MATCHED)."),
+    job_id: int | None = typer.Argument(None, help="Job ID to apply to (omit = all MATCHED)."),
     dry_run: bool = typer.Option(True, "--dry-run/--live", help="Preview without submitting."),
 ) -> None:
     """Generate CV + cover letter and submit application after human validation.
@@ -62,7 +60,7 @@ def status() -> None:
 @app.command("init-db")
 def init_db_cmd() -> None:
     """Initialise the database schema (run once on fresh install)."""
-    from src.storage.database import init_db, health_check
+    from src.storage.database import health_check, init_db
 
     init_db()
     ok = health_check()

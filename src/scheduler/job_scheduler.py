@@ -1,6 +1,5 @@
 """Pipeline orchestrator — ties all phases together in the right order."""
 
-from src.config.settings import settings
 
 
 class JobScheduler:
