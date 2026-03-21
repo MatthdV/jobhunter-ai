@@ -266,3 +266,36 @@ class TestCoverLetterBuildPrompt:
         )
         prompt = cl_generator._build_prompt(job)
         assert "English" in prompt or "english" in prompt.lower()
+
+
+@pytest.fixture
+def mock_cl_client() -> AsyncMock:
+    client = AsyncMock()
+    msg = MagicMock()
+    msg.content = [MagicMock(text="Voici ma lettre de motivation rédigée avec soin.")]
+    client.messages.create = AsyncMock(return_value=msg)
+    return client
+
+
+@pytest.fixture
+def cl_generator_with_mock(
+    monkeypatch: pytest.MonkeyPatch, mock_cl_client: AsyncMock
+) -> "CoverLetterGenerator":
+    monkeypatch.setattr(
+        "src.generators.cover_letter.settings",
+        MagicMock(anthropic_api_key="test-key", anthropic_model="claude-opus-4-6"),
+    )
+    monkeypatch.setattr("src.generators.cover_letter._PROFILE_PATH", _TEST_PROFILE)
+    with patch("src.generators.cover_letter.anthropic.AsyncAnthropic", return_value=mock_cl_client):
+        from src.generators.cover_letter import CoverLetterGenerator
+        return CoverLetterGenerator()
+
+
+class TestCoverLetterGenerate:
+    @pytest.mark.asyncio
+    async def test_generate_returns_nonempty_string(
+        self, cl_generator_with_mock: "CoverLetterGenerator"
+    ) -> None:
+        result = await cl_generator_with_mock.generate(make_job())
+        assert isinstance(result, str)
+        assert len(result) > 0
