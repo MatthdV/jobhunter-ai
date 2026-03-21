@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from src.storage.models import Job
 
 
+class ScoringError(Exception):
+    """Raised when Claude's response cannot be parsed or the API call fails."""
+
+
 @dataclass
 class ScoreResult:
     """Result of scoring a single job offer."""

@@ -95,6 +95,7 @@ class Job(Base):
 
     company = relationship("Company", back_populates="jobs")
     application = relationship("Application", back_populates="job", uselist=False)
+    match_result = relationship("MatchResult", back_populates="job", uselist=False)
 
     def __repr__(self) -> str:
         return f"<Job {self.title!r} @ {self.source} score={self.match_score}>"
@@ -141,3 +142,21 @@ class Recruiter(Base):
 
     def __repr__(self) -> str:
         return f"<Recruiter {self.name!r} <{self.email}>>"
+
+
+class MatchResult(Base):
+    __tablename__ = "match_results"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    job_id         = Column(Integer, ForeignKey("jobs.id"), unique=True, nullable=False)
+    score          = Column(Float, nullable=False)
+    reasoning      = Column(Text, nullable=False)
+    strengths_json = Column(Text, nullable=True)
+    concerns_json  = Column(Text, nullable=True)
+    model_used     = Column(String(100), nullable=False)
+    scored_at      = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("Job", back_populates="match_result")
+
+    def __repr__(self) -> str:
+        return f"<MatchResult job_id={self.job_id} score={self.score}>"
