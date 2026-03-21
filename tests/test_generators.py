@@ -1,42 +1,45 @@
 """Tests for CV and cover letter generators — Phase 3."""
 
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
-class TestCVGenerator:
-    def test_generate_creates_pdf_file(self, tmp_path: Path) -> None:
-        pass  # Phase 3
-
-    def test_generated_pdf_is_non_empty(self, tmp_path: Path) -> None:
-        pass  # Phase 3
-
-    def test_output_filename_includes_job_title(self, tmp_path: Path) -> None:
-        pass  # Phase 3
-
-    @pytest.mark.asyncio
-    async def test_select_highlights_calls_claude(self) -> None:
-        pass  # Phase 3
-
-    def test_render_html_includes_candidate_name(self) -> None:
-        pass  # Phase 3
+from src.config.settings import ConfigurationError
 
 
-class TestCoverLetterGenerator:
-    @pytest.mark.asyncio
-    async def test_generate_returns_non_empty_string(self) -> None:
-        pass  # Phase 3
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
-    def test_detect_language_french_job(self) -> None:
-        pass  # Phase 3
+_TEST_PROFILE = Path(__file__).parent / "fixtures" / "test_profile.yaml"
 
-    def test_detect_language_english_job(self) -> None:
-        pass  # Phase 3
+VALID_HIGHLIGHTS = '{"experience_ids": ["exp_acme_automation"], "skill_ids": ["n8n"], "hook": "Great fit."}'
 
-    @pytest.mark.asyncio
-    async def test_refine_incorporates_feedback(self) -> None:
-        pass  # Phase 3
 
-    def test_prompt_excludes_forbidden_buzzwords(self) -> None:
-        pass  # Phase 3
+def make_job(**kwargs: Any) -> MagicMock:
+    job = MagicMock()
+    job.title = kwargs.get("title", "Automation Engineer")
+    job.description = kwargs.get("description", "Seeking an n8n expert with Python skills.")
+    job.company = MagicMock()
+    job.company.name = kwargs.get("company", "Acme Corp")
+    return job
+
+
+# ---------------------------------------------------------------------------
+# CVGenerator tests
+# ---------------------------------------------------------------------------
+
+
+class TestCVGeneratorInit:
+    def test_init_raises_configuration_error_without_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "src.generators.cv_generator.settings",
+            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6"),
+        )
+        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
+            from src.generators.cv_generator import CVGenerator
+            CVGenerator()
