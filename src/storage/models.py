@@ -147,14 +147,14 @@ class Recruiter(Base):
 class MatchResult(Base):
     __tablename__ = "match_results"
 
-    id             = Column(Integer, primary_key=True, autoincrement=True)
-    job_id         = Column(Integer, ForeignKey("jobs.id"), unique=True, nullable=False)
-    score          = Column(Float, nullable=False)
-    reasoning      = Column(Text, nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), unique=True, nullable=False)
+    score = Column(Float, nullable=False)
+    reasoning = Column(Text, nullable=False)
     strengths_json = Column(Text, nullable=True)
-    concerns_json  = Column(Text, nullable=True)
-    model_used     = Column(String(100), nullable=False)
-    scored_at      = Column(DateTime, default=datetime.utcnow)
+    concerns_json = Column(Text, nullable=True)
+    model_used = Column(String(100), nullable=False)
+    scored_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job", back_populates="match_result")
 

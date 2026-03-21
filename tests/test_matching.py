@@ -1,6 +1,7 @@
 """Tests for the matching / scoring pipeline — Phase 2."""
 
 import json
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import anthropic
@@ -48,7 +49,7 @@ def make_job(**kwargs: object) -> Job:
 
 
 @pytest.fixture(autouse=True)
-def setup_db() -> None:  # type: ignore[return]
+def setup_db() -> Generator[None, None, None]:
     configure("sqlite:///:memory:")
     init_db()
     yield
