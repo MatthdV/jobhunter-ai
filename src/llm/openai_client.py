@@ -1,6 +1,5 @@
 """OpenAI-compatible LLM client (GPT-4o, GPT-4-turbo, o1, etc.)."""
 
-from typing import Optional
 
 import openai
 
@@ -17,7 +16,7 @@ class OpenAIClient(LLMClient):
         self,
         api_key: str,
         model: str,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
     ) -> None:
         if not api_key:
             raise ConfigurationError(f"{self._KEY_ENV_NAME} is required for AI features")
@@ -33,6 +32,6 @@ class OpenAIClient(LLMClient):
         response = await self._raw.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
-            messages=messages,  # type: ignore[arg-type]
+            messages=messages,
         )
         return response.choices[0].message.content or ""

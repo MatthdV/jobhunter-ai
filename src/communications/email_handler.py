@@ -4,7 +4,7 @@ import asyncio
 import base64
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -59,7 +59,7 @@ class EmailHandler:
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
 
-        creds = Credentials(
+        creds = Credentials(  # type: ignore[no-untyped-call]
             token=None,
             refresh_token=settings.gmail_refresh_token,
             token_uri="https://oauth2.googleapis.com/token",
@@ -102,7 +102,7 @@ class EmailHandler:
         if reply_to_thread:
             send_body["threadId"] = reply_to_thread
 
-        def _do_send() -> dict[str, Any]:
+        def _do_send() -> Any:
             return (
                 self._service.users()
                 .messages()
@@ -110,8 +110,8 @@ class EmailHandler:
                 .execute()
             )
 
-        result: dict[str, Any] = await asyncio.to_thread(_do_send)
-        return result["threadId"]
+        result: Any = await asyncio.to_thread(_do_send)
+        return str(result["threadId"])
 
     # ------------------------------------------------------------------
     # Slice 30 — get_unread_replies + mark_as_read
@@ -124,7 +124,7 @@ class EmailHandler:
 
         messages: list[EmailMessage] = []
 
-        def _fetch_thread(thread_id: str) -> dict[str, Any]:
+        def _fetch_thread(thread_id: str) -> Any:
             return (
                 self._service.users()
                 .threads()
@@ -133,7 +133,7 @@ class EmailHandler:
             )
 
         for thread_id in thread_ids:
-            thread: dict[str, Any] = await asyncio.to_thread(_fetch_thread, thread_id)
+            thread: Any = await asyncio.to_thread(_fetch_thread, thread_id)
             for raw_msg in thread.get("messages", []):
                 label_ids: list[str] = raw_msg.get("labelIds", [])
                 if "UNREAD" not in label_ids:
@@ -154,7 +154,7 @@ class EmailHandler:
                     from email.utils import parsedate_to_datetime
                     received_at = parsedate_to_datetime(date_str)
                 except Exception:
-                    received_at = datetime.now(tz=timezone.utc)
+                    received_at = datetime.now(tz=UTC)
 
                 messages.append(
                     EmailMessage(

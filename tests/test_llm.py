@@ -1,13 +1,16 @@
 """Tests for the src/llm/ abstraction layer."""
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import anthropic
+
+if TYPE_CHECKING:
+    from src.llm.anthropic_client import AnthropicClient
+    from src.llm.mistral_client import MistralClient
+    from src.llm.openai_client import OpenAIClient
 import httpx
 import pytest
-
-from src.llm.base import LLMClient
-
 
 # ---------------------------------------------------------------------------
 # AnthropicClient tests
@@ -133,9 +136,8 @@ class TestOpenAIClientInit:
         pytest.importorskip("openai")
         from src.config.settings import ConfigurationError
         from src.llm.openai_client import OpenAIClient
-        with patch("openai.AsyncOpenAI"):
-            with pytest.raises(ConfigurationError, match="OPENAI_API_KEY"):
-                OpenAIClient(api_key="", model="gpt-4o")
+        with patch("openai.AsyncOpenAI"), pytest.raises(ConfigurationError, match="OPENAI_API_KEY"):
+            OpenAIClient(api_key="", model="gpt-4o")
 
 
 class TestOpenAIClientComplete:
@@ -196,9 +198,8 @@ class TestMistralClientInit:
         pytest.importorskip("mistralai")
         from src.config.settings import ConfigurationError
         from src.llm.mistral_client import MistralClient
-        with patch("mistralai.Mistral"):
-            with pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
-                MistralClient(api_key="", model="mistral-large-latest")
+        with patch("mistralai.Mistral"), pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
+            MistralClient(api_key="", model="mistral-large-latest")
 
 
 class TestMistralClientComplete:

@@ -15,7 +15,7 @@ class MistralClient(LLMClient):
         self._raw = mistralai.Mistral(api_key=api_key)
 
     async def complete(self, prompt: str, max_tokens: int, system: str = "") -> str:
-        from mistralai.models import SystemMessage, UserMessage  # type: ignore[import-untyped]
+        from mistralai.models import SystemMessage, UserMessage
         messages = []
         if system:
             messages.append(SystemMessage(content=system))
