@@ -102,3 +102,66 @@ class TestAnthropicClientComplete:
         )
         with patch("asyncio.sleep"), pytest.raises(anthropic.RateLimitError):
             await anthropic_client.complete("prompt", 100)
+
+
+# ---------------------------------------------------------------------------
+# OpenAIClient tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_openai_raw_client() -> AsyncMock:
+    raw = AsyncMock()
+    choice = MagicMock()
+    choice.message.content = "openai response"
+    raw.chat.completions.create = AsyncMock(
+        return_value=MagicMock(choices=[choice])
+    )
+    return raw
+
+
+@pytest.fixture
+def openai_client(mock_openai_raw_client: AsyncMock) -> "OpenAIClient":
+    pytest.importorskip("openai")
+    from src.llm.openai_client import OpenAIClient
+    with patch("openai.AsyncOpenAI", return_value=mock_openai_raw_client):
+        return OpenAIClient(api_key="test-key", model="gpt-4o")
+
+
+class TestOpenAIClientInit:
+    def test_raises_configuration_error_without_api_key(self) -> None:
+        pytest.importorskip("openai")
+        from src.config.settings import ConfigurationError
+        from src.llm.openai_client import OpenAIClient
+        with patch("openai.AsyncOpenAI"):
+            with pytest.raises(ConfigurationError, match="OPENAI_API_KEY"):
+                OpenAIClient(api_key="", model="gpt-4o")
+
+
+class TestOpenAIClientComplete:
+    @pytest.mark.asyncio
+    async def test_complete_returns_text(
+        self, openai_client: "OpenAIClient", mock_openai_raw_client: AsyncMock
+    ) -> None:
+        result = await openai_client.complete(prompt="test", max_tokens=100)
+        assert result == "openai response"
+
+    @pytest.mark.asyncio
+    async def test_complete_includes_system_message_in_messages(
+        self, openai_client: "OpenAIClient", mock_openai_raw_client: AsyncMock
+    ) -> None:
+        await openai_client.complete(prompt="test", max_tokens=100, system="be concise")
+        call_kwargs = mock_openai_raw_client.chat.completions.create.call_args.kwargs
+        messages = call_kwargs["messages"]
+        assert messages[0] == {"role": "system", "content": "be concise"}
+        assert messages[1] == {"role": "user", "content": "test"}
+
+    @pytest.mark.asyncio
+    async def test_complete_without_system_sends_only_user_message(
+        self, openai_client: "OpenAIClient", mock_openai_raw_client: AsyncMock
+    ) -> None:
+        await openai_client.complete(prompt="test", max_tokens=100)
+        call_kwargs = mock_openai_raw_client.chat.completions.create.call_args.kwargs
+        messages = call_kwargs["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
