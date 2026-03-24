@@ -165,3 +165,46 @@ class TestOpenAIClientComplete:
         messages = call_kwargs["messages"]
         assert len(messages) == 1
         assert messages[0]["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# MistralClient tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_mistral_raw_client() -> AsyncMock:
+    raw = AsyncMock()
+    choice = MagicMock()
+    choice.message.content = "mistral response"
+    raw.chat.complete_async = AsyncMock(
+        return_value=MagicMock(choices=[choice])
+    )
+    return raw
+
+
+@pytest.fixture
+def mistral_client(mock_mistral_raw_client: AsyncMock) -> "MistralClient":
+    pytest.importorskip("mistralai")
+    from src.llm.mistral_client import MistralClient
+    with patch("mistralai.Mistral", return_value=mock_mistral_raw_client):
+        return MistralClient(api_key="test-key", model="mistral-large-latest")
+
+
+class TestMistralClientInit:
+    def test_raises_configuration_error_without_api_key(self) -> None:
+        pytest.importorskip("mistralai")
+        from src.config.settings import ConfigurationError
+        from src.llm.mistral_client import MistralClient
+        with patch("mistralai.Mistral"):
+            with pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
+                MistralClient(api_key="", model="mistral-large-latest")
+
+
+class TestMistralClientComplete:
+    @pytest.mark.asyncio
+    async def test_complete_returns_text(
+        self, mistral_client: "MistralClient", mock_mistral_raw_client: AsyncMock
+    ) -> None:
+        result = await mistral_client.complete(prompt="test", max_tokens=100)
+        assert result == "mistral response"
