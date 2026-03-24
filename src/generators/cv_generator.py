@@ -8,11 +8,12 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import anthropic
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from src.config.settings import ConfigurationError, settings
+from src.config.settings import settings
+from src.llm.base import LLMClient
+from src.llm.factory import get_client
 from src.storage.models import Job
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,12 @@ class CVGenerator:
 
     TEMPLATE_DIR = Path(__file__).parent / "templates"
 
-    def __init__(self) -> None:
-        if not settings.anthropic_api_key:
-            raise ConfigurationError("ANTHROPIC_API_KEY is required for CV generation")
+    def __init__(self, client: LLMClient | None = None) -> None:
+        if client is None:
+            client = get_client(settings.llm_provider)
+        self._client = client
         with _PROFILE_PATH.open() as fh:
             self._profile: dict[str, Any] = yaml.safe_load(fh)
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         self._jinja_env = Environment(
             loader=FileSystemLoader(str(self.TEMPLATE_DIR)),
             autoescape=False,
@@ -90,7 +91,7 @@ class CVGenerator:
         return self._html_to_pdf(html, output_dir / filename)
 
     async def _select_highlights(self, job: Job) -> dict[str, Any]:
-        """Use Claude to identify which experiences and skills to emphasise."""
+        """Use LLM to identify which experiences and skills to emphasise."""
         exp_ids = [e["id"] for e in self._profile.get("experiences", [])]
         skills = self._profile.get("skills", {})
         all_skills: list[str] = skills.get("top_3", []) + skills.get("additional", [])
@@ -105,13 +106,11 @@ class CVGenerator:
             f"Description:\n{(job.description or '')[:1500]}"
         )
 
-        response = await self._client.messages.create(
-            model=settings.anthropic_model,
+        text = await self._client.complete(
+            prompt=user_message,
             max_tokens=_CV_MAX_TOKENS,
             system=_CV_SYSTEM_MESSAGE,
-            messages=[{"role": "user", "content": user_message}],
         )
-        text = next(block.text for block in response.content if hasattr(block, "text"))
 
         data: dict[str, Any] | None = None
         try:
@@ -128,12 +127,10 @@ class CVGenerator:
         return data  # type: ignore[return-value]
 
     def _render_html(self, context: dict[str, Any]) -> str:
-        """Render the Jinja2 CV template with the given context."""
         template = self._jinja_env.get_template("cv.html.jinja2")
         return template.render(**context)
 
     def _html_to_pdf(self, html: str, output_path: Path) -> Path:
-        """Convert an HTML string to PDF using WeasyPrint."""
         from weasyprint import HTML  # type: ignore[import-untyped]
         HTML(string=html).write_pdf(str(output_path))
         return output_path
