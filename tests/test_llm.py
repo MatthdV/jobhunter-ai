@@ -208,3 +208,36 @@ class TestMistralClientComplete:
     ) -> None:
         result = await mistral_client.complete(prompt="test", max_tokens=100)
         assert result == "mistral response"
+
+
+# ---------------------------------------------------------------------------
+# Factory tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetClient:
+    def test_get_client_anthropic_returns_anthropic_client(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.llm.factory import get_client
+        monkeypatch.setattr(
+            "src.llm.factory.settings",
+            MagicMock(
+                llm_provider="anthropic",
+                llm_model="claude-opus-4-6",
+                anthropic_api_key="test-key",
+                openai_api_key="",
+                mistral_api_key="",
+                deepseek_api_key="",
+                openrouter_api_key="",
+            ),
+        )
+        with patch("anthropic.AsyncAnthropic"):
+            client = get_client("anthropic")
+        from src.llm.anthropic_client import AnthropicClient
+        assert isinstance(client, AnthropicClient)
+
+    def test_get_client_unknown_provider_raises_value_error(self) -> None:
+        from src.llm.factory import get_client
+        with pytest.raises(ValueError, match="Unknown LLM provider"):
+            get_client("unknown-provider")
