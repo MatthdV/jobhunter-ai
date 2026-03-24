@@ -1,0 +1,19 @@
+{
+  "status": "OK",
+  "data": [
+    {
+      "job_id": "eyJqb2JJZCI6ImRlZjQ1NiJ9",
+      "employer_name": "Tech SAS",
+      "job_title": "Automation Lead",
+      "job_description": "Lead the automation team at Tech SAS. Python, Ansible, Terraform. Remote work possible.",
+      "job_city": "Lyon",
+      "job_country": "FR",
+      "job_is_remote": false,
+      "job_min_salary": null,
+      "job_max_salary": null,
+      "job_salary_period": null,
+      "job_apply_link": "https://fr.indeed.com/viewjob?jk=def456",
+      "job_employment_type": "CONTRACTOR"
+    }
+  ]
+}
