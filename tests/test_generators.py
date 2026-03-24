@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -170,8 +170,12 @@ class TestCoverLetterGeneratorInit:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
+            "src.generators.cover_letter.get_client",
+            MagicMock(side_effect=ConfigurationError("ANTHROPIC_API_KEY is required")),
+        )
+        monkeypatch.setattr(
             "src.generators.cover_letter.settings",
-            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6"),
+            MagicMock(llm_provider="anthropic"),
         )
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             from src.generators.cover_letter import CoverLetterGenerator
@@ -180,14 +184,12 @@ class TestCoverLetterGeneratorInit:
 
 @pytest.fixture
 def cl_generator(monkeypatch: pytest.MonkeyPatch) -> "CoverLetterGenerator":
-    monkeypatch.setattr(
-        "src.generators.cover_letter.settings",
-        MagicMock(anthropic_api_key="test-key", anthropic_model="claude-opus-4-6"),
-    )
+    from src.llm.base import LLMClient
+    mock_llm: AsyncMock = AsyncMock(spec=LLMClient)
+    mock_llm.complete = AsyncMock(return_value="Voici ma lettre de motivation.")
     monkeypatch.setattr("src.generators.cover_letter._PROFILE_PATH", _TEST_PROFILE)
-    with patch("anthropic.AsyncAnthropic"):
-        from src.generators.cover_letter import CoverLetterGenerator
-        return CoverLetterGenerator()
+    from src.generators.cover_letter import CoverLetterGenerator
+    return CoverLetterGenerator(client=mock_llm)
 
 
 class TestCoverLetterDetectLanguage:
@@ -257,10 +259,9 @@ class TestCoverLetterBuildPrompt:
 
 @pytest.fixture
 def mock_cl_client() -> AsyncMock:
-    client = AsyncMock()
-    msg = MagicMock()
-    msg.content = [MagicMock(text="Voici ma lettre de motivation rédigée avec soin.")]
-    client.messages.create = AsyncMock(return_value=msg)
+    from src.llm.base import LLMClient
+    client: AsyncMock = AsyncMock(spec=LLMClient)
+    client.complete = AsyncMock(return_value="Voici ma lettre de motivation rédigée avec soin.")
     return client
 
 
@@ -268,14 +269,9 @@ def mock_cl_client() -> AsyncMock:
 def cl_generator_with_mock(
     monkeypatch: pytest.MonkeyPatch, mock_cl_client: AsyncMock
 ) -> "CoverLetterGenerator":
-    monkeypatch.setattr(
-        "src.generators.cover_letter.settings",
-        MagicMock(anthropic_api_key="test-key", anthropic_model="claude-opus-4-6"),
-    )
     monkeypatch.setattr("src.generators.cover_letter._PROFILE_PATH", _TEST_PROFILE)
-    with patch("src.generators.cover_letter.anthropic.AsyncAnthropic", return_value=mock_cl_client):
-        from src.generators.cover_letter import CoverLetterGenerator
-        return CoverLetterGenerator()
+    from src.generators.cover_letter import CoverLetterGenerator
+    return CoverLetterGenerator(client=mock_cl_client)
 
 
 class TestCoverLetterGenerate:
@@ -302,8 +298,8 @@ class TestCoverLetterRefine:
 
         assert isinstance(result, str)
         assert len(result) > 0
-        call_args = mock_cl_client.messages.create.call_args
-        prompt_content = call_args.kwargs["messages"][0]["content"]
+        call_args = mock_cl_client.complete.call_args
+        prompt_content = call_args.kwargs.get("prompt") or call_args.args[0]
         assert "Ma lettre originale." in prompt_content
         assert feedback in prompt_content
 
