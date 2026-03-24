@@ -28,6 +28,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Only handle HTTPException — let system errors propagate normally
 app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
+
 app.include_router(health_router)
+
+# Auth — loaded after app creation to avoid circular imports
+from api.auth.router import router as auth_router  # noqa: E402
+from api.routes.applications import router as applications_router  # noqa: E402
+from api.routes.jobs import router as jobs_router  # noqa: E402
+from api.routes.match import router as match_router  # noqa: E402
+from api.routes.scan import router as scan_router  # noqa: E402
+from api.routes.settings import router as settings_router  # noqa: E402
+
+app.include_router(auth_router)
+app.include_router(settings_router)
+app.include_router(jobs_router)
+app.include_router(scan_router)
+app.include_router(match_router)
+app.include_router(applications_router)
