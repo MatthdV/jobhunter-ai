@@ -11,6 +11,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- LLM Provider ---
+    llm_provider: str = Field(
+        "anthropic",
+        description='LLM provider: "anthropic" | "openai" | "mistral" | "deepseek" | "openrouter"',
+    )
+    llm_model: str = Field(
+        "",
+        description="Model name — leave empty to use provider default",
+    )
+
     # --- Anthropic ---
     # Empty by default so the module can be imported without a .env file.
     # Scorer and CoverLetterGenerator will raise ConfigurationError at init
@@ -19,6 +29,18 @@ class Settings(BaseSettings):
     anthropic_model: str = Field(
         "claude-opus-4-6", description="Claude model for scoring and generation"
     )
+
+    # --- OpenAI ---
+    openai_api_key: str = Field("", description="OpenAI API key")
+
+    # --- Mistral ---
+    mistral_api_key: str = Field("", description="Mistral AI API key")
+
+    # --- DeepSeek ---
+    deepseek_api_key: str = Field("", description="DeepSeek API key")
+
+    # --- OpenRouter ---
+    openrouter_api_key: str = Field("", description="OpenRouter API key")
 
     # --- Gmail ---
     gmail_client_id: str = Field("", description="OAuth2 client ID")
@@ -45,7 +67,15 @@ class Settings(BaseSettings):
 
     @property
     def is_ai_configured(self) -> bool:
-        return bool(self.anthropic_api_key)
+        """True if the active LLM provider has a key configured."""
+        key_map = {
+            "anthropic": self.anthropic_api_key,
+            "openai": self.openai_api_key,
+            "mistral": self.mistral_api_key,
+            "deepseek": self.deepseek_api_key,
+            "openrouter": self.openrouter_api_key,
+        }
+        return bool(key_map.get(self.llm_provider, ""))
 
     @property
     def is_gmail_configured(self) -> bool:
