@@ -189,7 +189,7 @@ def mock_mistral_raw_client() -> AsyncMock:
 def mistral_client(mock_mistral_raw_client: AsyncMock) -> "MistralClient":
     pytest.importorskip("mistralai")
     from src.llm.mistral_client import MistralClient
-    with patch("mistralai.Mistral", return_value=mock_mistral_raw_client):
+    with patch("mistralai.client.Mistral", return_value=mock_mistral_raw_client):
         return MistralClient(api_key="test-key", model="mistral-large-latest")
 
 
@@ -198,7 +198,7 @@ class TestMistralClientInit:
         pytest.importorskip("mistralai")
         from src.config.settings import ConfigurationError
         from src.llm.mistral_client import MistralClient
-        with patch("mistralai.Mistral"), pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
+        with patch("mistralai.client.Mistral"), pytest.raises(ConfigurationError, match="MISTRAL_API_KEY"):
             MistralClient(api_key="", model="mistral-large-latest")
 
 
