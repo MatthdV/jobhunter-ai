@@ -1,14 +1,17 @@
 """Tests for RecruiterResponder — Phase 4C (slices 31-32)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.config.settings import ConfigurationError
 from src.communications.email_handler import EmailMessage
+from src.config.settings import ConfigurationError
 from src.storage.models import Application, ApplicationStatus
 
+if TYPE_CHECKING:
+    from src.communications.recruiter_responder import RecruiterResponder
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -22,7 +25,7 @@ def make_email_message(body: str = "Bonjour, interview demain?") -> EmailMessage
         sender="alice@company.com",
         subject="Re: Application",
         body=body,
-        received_at=datetime(2026, 3, 21, 10, 0, 0, tzinfo=timezone.utc),
+        received_at=datetime(2026, 3, 21, 10, 0, 0, tzinfo=UTC),
     )
 
 

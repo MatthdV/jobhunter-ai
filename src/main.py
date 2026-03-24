@@ -25,8 +25,61 @@ def scan(
     limit: int = typer.Option(50, "--limit", "-l", help="Max offers per source."),
 ) -> None:
     """Scrape job boards and store new offers in the database."""
+    import asyncio
+
+    from src.config.settings import settings  # noqa: F401 — loads .env
+    from src.scrapers.filters import ScraperFilters
+    from src.storage.database import get_session
+    from src.storage.models import Job
+
     console.print(f"[bold]Scanning[/bold] {sources} (limit={limit} per source)…")
-    raise NotImplementedError("Phase 2 — scraping not yet implemented")
+
+    _scraper_map = {
+        "wttj": "src.scrapers.wttj.WTTJScraper",
+        "indeed": "src.scrapers.indeed.IndeedScraper",
+        "linkedin": "src.scrapers.linkedin.LinkedInScraper",
+    }
+
+    async def _run() -> int:
+        with get_session() as session:
+            existing_urls: set[str] = {u for (u,) in session.query(Job.url).all()}
+
+        total = 0
+        for source in sources:
+            if source not in _scraper_map:
+                console.print(f"[yellow]Unknown source: {source}[/yellow]")
+                continue
+            module_path, _, class_name = _scraper_map[source].rpartition(".")
+            import importlib
+            mod = importlib.import_module(module_path)
+            scraper_cls = getattr(mod, class_name)
+            filters = ScraperFilters(remote_only=False)
+            try:
+                async with scraper_cls() as scraper:
+                    jobs = await scraper.search(
+                        keywords=["automation", "n8n", "RevOps"],
+                        location="France",
+                        filters=filters,
+                        limit=limit,
+                        seen_urls=existing_urls,
+                    )
+            except Exception as exc:
+                console.print(f"[red]{source} scraper error:[/red] {exc}")
+                continue
+            fresh = [j for j in jobs if j.url not in existing_urls]
+            if fresh:
+                with get_session() as session:
+                    for job in fresh:
+                        session.add(job)
+                        existing_urls.add(job.url)
+                total += len(fresh)
+                console.print(f"  [green]{source}[/green]: {len(fresh)} new jobs")
+            else:
+                console.print(f"  {source}: 0 new jobs (all duplicates)")
+        return total
+
+    total = asyncio.run(_run())
+    console.print(f"[bold green]Done.[/bold green] {total} new job(s) stored.")
 
 
 @app.command()
@@ -34,8 +87,29 @@ def match(
     min_score: int = typer.Option(80, "--min-score", help="Minimum match score (0–100)."),
 ) -> None:
     """Score all NEW jobs against the candidate profile using Claude."""
-    console.print(f"[bold]Matching[/bold] jobs with min_score={min_score}…")
-    raise NotImplementedError("Phase 2 — matching not yet implemented")
+    import asyncio
+
+    from src.matching.scorer import Scorer
+    from src.storage.database import get_session
+    from src.storage.models import Job, JobStatus
+
+    console.print(f"[bold]Matching[/bold] NEW jobs (min_score={min_score})…")
+
+    async def _run() -> tuple[int, int]:
+        scorer = Scorer()
+        with get_session() as session:
+            new_jobs = session.query(Job).filter(Job.status == JobStatus.NEW).all()
+            if not new_jobs:
+                return 0, 0
+            console.print(f"  Scoring {len(new_jobs)} job(s)…")
+            results = await scorer.score_batch(new_jobs, session)
+            matched = sum(1 for j in new_jobs if j.status == JobStatus.MATCHED)
+        return len(results), matched
+
+    total, matched = asyncio.run(_run())
+    console.print(
+        f"[bold green]Done.[/bold green] {total} scored, {matched} matched (≥{min_score})."
+    )
 
 
 @app.command()
@@ -48,7 +122,8 @@ def apply(
     Always requires explicit human approval before submission.
     """
     import asyncio
-    from datetime import date, datetime, time as _time
+    from datetime import date, datetime
+    from datetime import time as _time
 
     from src.config.settings import settings
     from src.generators.cover_letter import CoverLetterGenerator
@@ -101,7 +176,7 @@ def apply(
 
         generated = asyncio.run(_run())
 
-        for job, (cv_path, letter) in zip(eligible, generated):
+        for job, (cv_path, letter) in zip(eligible, generated, strict=False):
             app_record = Application(
                 job_id=job.id,
                 cv_path=str(cv_path),
@@ -137,11 +212,11 @@ def init_db_cmd() -> None:
 
 @app.command("import-linkedin")
 def import_linkedin(
-    zip_path: Path = typer.Argument(..., help="Path to the LinkedIn data export ZIP."),
+    zip_path: Path = typer.Argument(..., help="Path to the LinkedIn data export ZIP."),  # noqa: B008
 ) -> None:
     """Bootstrap profile.yaml with experience data from a LinkedIn export ZIP."""
-    from src.importers.linkedin_importer import LinkedInImporter
     from src.config.settings import settings  # noqa: F401 — ensures .env loaded
+    from src.importers.linkedin_importer import LinkedInImporter
 
     profile_path = Path(__file__).parent / "config" / "profile.yaml"
     console.print(f"[bold]Importing[/bold] LinkedIn data from {zip_path}…")
@@ -150,7 +225,7 @@ def import_linkedin(
         console.print("[green]Done.[/green] profile.yaml updated.")
     except ValueError as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
 
 @app.command("run-once")

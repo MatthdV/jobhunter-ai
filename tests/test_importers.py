@@ -1,6 +1,5 @@
 """Tests for LinkedInImporter — Phase 3."""
 
-import io
 import zipfile
 from pathlib import Path
 

@@ -2,7 +2,8 @@
 
 from collections.abc import Generator
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -10,6 +11,8 @@ from src.config.settings import ConfigurationError
 from src.storage.database import configure, drop_all, get_session, init_db
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus
 
+if TYPE_CHECKING:
+    from src.scheduler.job_scheduler import JobScheduler
 
 # ---------------------------------------------------------------------------
 # DB fixture
@@ -153,7 +156,7 @@ class TestMatchPhase:
         mock_scorer.score_batch = AsyncMock(return_value=[match_result])
 
         scheduler = make_scheduler(scorer=mock_scorer)
-        count = await scheduler._match_phase()
+        await scheduler._match_phase()
 
         mock_scorer.score_batch.assert_called_once()
 
@@ -162,7 +165,6 @@ class TestMatchPhase:
             job = make_new_job()
             session.add(job)
             session.flush()
-            job_id = job.id
 
         mock_scorer = MagicMock()
 
@@ -196,7 +198,7 @@ class TestApplyPhase:
             session.add(job)
 
         scheduler = make_scheduler(dry_run=True)
-        count = await scheduler._apply_phase()
+        await scheduler._apply_phase()
 
         with get_session() as session:
             apps = session.query(Application).all()

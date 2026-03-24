@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from datetime import date, datetime, time as _time
+from datetime import date, datetime
+from datetime import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -248,8 +249,11 @@ class JobScheduler:
                 fresh_job = session.get(Job, job_id)
                 fresh_app = session.get(Application, app_id)
 
+                if fresh_job is None or fresh_app is None:
+                    continue
+
                 if self._telegram:
-                    fresh_app.status = ApplicationStatus.PENDING_VALIDATION
+                    fresh_app.status = ApplicationStatus.PENDING_VALIDATION  # type: ignore[assignment]
                     approved = await self._telegram.request_approval(
                         fresh_job, fresh_app
                     )
@@ -257,12 +261,12 @@ class JobScheduler:
                     approved = not self._dry_run
 
                 if approved and not self._dry_run:
-                    fresh_app.status = ApplicationStatus.SUBMITTED
-                    fresh_job.status = JobStatus.APPLIED
+                    fresh_app.status = ApplicationStatus.SUBMITTED  # type: ignore[assignment]
+                    fresh_job.status = JobStatus.APPLIED  # type: ignore[assignment]
                     submitted_count += 1
                 else:
                     # Revert to DRAFT on rejection or dry-run
-                    fresh_app.status = ApplicationStatus.DRAFT
+                    fresh_app.status = ApplicationStatus.DRAFT  # type: ignore[assignment]
 
         return created_count if self._dry_run else submitted_count
 
@@ -311,7 +315,7 @@ class JobScheduler:
                 if app is None:
                     continue
                 await self._responder.handle(msg, app)
-                app.status = ApplicationStatus.REPLIED
+                app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
                 if self._telegram:
                     job = app.job
                     await self._telegram.notify_reply_received(

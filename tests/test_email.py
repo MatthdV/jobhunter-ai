@@ -1,16 +1,15 @@
 """Tests for EmailHandler — Phase 4C (slices 28-30)."""
 
 import base64
-from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.config.settings import ConfigurationError
 
+if TYPE_CHECKING:
+    from src.communications.email_handler import EmailHandler
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -177,7 +176,8 @@ class TestGetUnreadReplies:
             "msg001", "thread123", "alice@company.com", "Re: Application", "Bonjour!"
         )
         thread = _make_gmail_thread("thread123", [msg])
-        mock_gmail_service.users.return_value.threads.return_value.get.return_value.execute.return_value = thread
+        mock_threads = mock_gmail_service.users.return_value.threads.return_value
+        mock_threads.get.return_value.execute.return_value = thread
 
         from src.communications.email_handler import EmailMessage
         results = await email_handler.get_unread_replies(["thread123"])
@@ -196,7 +196,8 @@ class TestGetUnreadReplies:
             label_ids=["INBOX"],  # no UNREAD label
         )
         thread = _make_gmail_thread("thread456", [msg])
-        mock_gmail_service.users.return_value.threads.return_value.get.return_value.execute.return_value = thread
+        mock_threads = mock_gmail_service.users.return_value.threads.return_value
+        mock_threads.get.return_value.execute.return_value = thread
 
         results = await email_handler.get_unread_replies(["thread456"])
         assert len(results) == 0

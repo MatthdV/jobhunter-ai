@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from datetime import date, datetime, time as _time
+from datetime import date, datetime
+from datetime import time as _time
 
 import telegram
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -112,15 +113,16 @@ class TelegramBot:
         """
         loop = asyncio.get_event_loop()
         future: asyncio.Future[bool] = loop.create_future()
-        self._pending[application.id] = future
+        app_id: int = int(application.id)
+        self._pending[app_id] = future
 
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "✅ Approuver", callback_data=f"approve_{application.id}"
+                    "✅ Approuver", callback_data=f"approve_{app_id}"
                 ),
                 InlineKeyboardButton(
-                    "❌ Rejeter", callback_data=f"reject_{application.id}"
+                    "❌ Rejeter", callback_data=f"reject_{app_id}"
                 ),
             ]
         ])
@@ -135,8 +137,8 @@ class TelegramBot:
 
         try:
             return await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
-            self._pending.pop(application.id, None)
+        except TimeoutError:
+            self._pending.pop(app_id, None)
             logger.warning(
                 "Approval request for application %d timed out after %ss",
                 application.id,

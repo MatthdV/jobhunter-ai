@@ -72,13 +72,24 @@ class WTTJScraper(BaseScraper):
         page = await self._browser.new_page()
 
         async def _handle_response(response: Response) -> None:
-            if "/api/" in response.url and "jobs" in response.url:
-                try:
-                    data = await response.json()
-                    if isinstance(data, dict) and "jobs" in data:
-                        collected.extend(data["jobs"])
-                except Exception as exc:
-                    logger.warning("Failed to parse XHR response from %s: %s", response.url, exc)
+            url = response.url
+            # WTTJ uses Algolia for job search (multi-index query endpoint)
+            is_algolia = "algolia.net" in url and "queries" in url
+            # Fallback: legacy WTTJ internal API
+            is_wttj_api = "/api/" in url and "jobs" in url
+            if not (is_algolia or is_wttj_api):
+                return
+            try:
+                data = await response.json()
+                # Algolia multi-index response: {"results": [{"hits": [...]}]}
+                if isinstance(data, dict) and "results" in data:
+                    for result in data["results"]:
+                        hits = result.get("hits", [])
+                        collected.extend(hits)
+                elif isinstance(data, dict) and "jobs" in data:
+                    collected.extend(data["jobs"])
+            except Exception as exc:
+                logger.warning("Failed to parse XHR response from %s: %s", response.url, exc)
 
         page.on("response", _handle_response)
 
@@ -100,50 +111,101 @@ class WTTJScraper(BaseScraper):
     # _parse_raw
     # ------------------------------------------------------------------
 
-    async def _parse_raw(self, raw: Any) -> Job:
-        """Parse a WTTJ API job dict into a Job instance.
+    _CONTRACT_MAP: dict[str, str] = {
+        "full_time": "CDI",
+        "part_time": "Temps partiel",
+        "internship": "Stage",
+        "freelance": "Freelance",
+        "temporary": "CDD",
+        "apprenticeship": "Alternance",
+        "vie": "VIE",
+    }
 
-        WTTJ provides structured salary data — salary_min/max are set directly
-        from JSON fields. _normalize() will not call _parse_salary() for these jobs.
+    async def _parse_raw(self, raw: Any) -> Job:
+        """Parse a WTTJ Algolia hit or legacy API dict into a Job instance.
+
+        Algolia fields (current): name, slug, reference, summary, salary_yearly_minimum,
+          salary_yearly_maximum, salary_currency, remote, contract_type (string).
+        Legacy fields (fallback): website_url, description, profile, salary (dict).
         """
         if not isinstance(raw, dict):
             raise ParseError(f"Expected dict, got {type(raw).__name__}")
 
         try:
             title: str = raw.get("name") or ""
+            if not title:
+                raise ParseError("Missing required field 'name'")
+
+            # --- URL ---
             url: str = raw.get("website_url") or ""
+            if not url:
+                # Algolia: build canonical URL from reference/slug
+                ref = raw.get("reference") or raw.get("objectID") or raw.get("slug") or ""
+                if not ref:
+                    raise ParseError("Cannot build URL: no website_url, reference, or slug")
+                url = f"https://www.welcometothejungle.com/fr/jobs/{ref}"
 
-            if not title or not url:
-                raise ParseError("Missing required fields 'name' or 'website_url'")
-
-            salary_data = raw.get("salary")
+            # --- Salary ---
             salary_min: int | None = None
             salary_max: int | None = None
             salary_raw_str: str | None = None
 
-            if isinstance(salary_data, dict):
-                raw_min = salary_data.get("min")
-                raw_max = salary_data.get("max")
-                if raw_min is not None:
-                    salary_min = int(raw_min)
-                if raw_max is not None:
-                    salary_max = int(raw_max)
-                if salary_min is not None or salary_max is not None:
-                    salary_raw_str = f"{salary_min}-{salary_max} EUR/an"
+            # Algolia yearly salary fields
+            algolia_min = raw.get("salary_yearly_minimum")
+            algolia_max = raw.get("salary_yearly_maximum")
+            if algolia_min is not None or algolia_max is not None:
+                salary_min = int(algolia_min) if algolia_min is not None else None
+                salary_max = int(algolia_max) if algolia_max is not None else None
+                salary_raw_str = f"{salary_min}-{salary_max} {raw.get('salary_currency', 'EUR')}/an"
+            else:
+                # Legacy nested salary dict
+                salary_data = raw.get("salary")
+                if isinstance(salary_data, dict):
+                    raw_min = salary_data.get("min")
+                    raw_max = salary_data.get("max")
+                    if raw_min is not None:
+                        salary_min = int(raw_min)
+                    if raw_max is not None:
+                        salary_max = int(raw_max)
+                    if salary_min is not None or salary_max is not None:
+                        salary_raw_str = f"{salary_min}-{salary_max} EUR/an"
 
-            contract_raw = raw.get("contract_type") or {}
-            contract_type: str | None = (
-                contract_raw.get("fr") or contract_raw.get("en") or None
-            )
+            # --- Contract type ---
+            ct_raw = raw.get("contract_type")
+            if isinstance(ct_raw, dict):
+                contract_type: str | None = ct_raw.get("fr") or ct_raw.get("en") or None
+            elif isinstance(ct_raw, str):
+                contract_type = self._CONTRACT_MAP.get(ct_raw, ct_raw)
+            else:
+                contract_type = None
 
+            # --- Location ---
             location_data = raw.get("location") or {}
             city = location_data.get("city") or ""
             country = location_data.get("country_code") or ""
-            location_str = ", ".join(filter(None, [city, country])) or None
+            # Algolia: offices list
+            if not city:
+                offices = raw.get("offices") or []
+                if offices and isinstance(offices[0], dict):
+                    city = offices[0].get("city") or ""
+                    country = offices[0].get("country_code") or country
+            location_str: str | None = ", ".join(filter(None, [city, country])) or None
 
-            description = " ".join(
-                filter(None, [raw.get("description") or "", raw.get("profile") or ""])
-            ) or None
+            # --- Remote ---
+            remote_val = raw.get("remote")
+            if isinstance(remote_val, str):
+                is_remote = remote_val == "full"
+            elif isinstance(remote_val, bool):
+                is_remote = remote_val
+            else:
+                is_remote = False
+
+            # --- Description ---
+            description: str | None = (
+                raw.get("summary")
+                or " ".join(filter(None, [raw.get("description") or "", raw.get("profile") or ""]))
+                or None
+            )
 
             return Job(
                 title=title,
@@ -151,6 +213,7 @@ class WTTJScraper(BaseScraper):
                 source=self.source,
                 description=description,
                 location=location_str,
+                is_remote=is_remote,
                 salary_raw=salary_raw_str,
                 salary_min=salary_min,
                 salary_max=salary_max,
