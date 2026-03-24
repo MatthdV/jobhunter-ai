@@ -1,5 +1,7 @@
 """OpenAI-compatible LLM client (GPT-4o, GPT-4-turbo, o1, etc.)."""
 
+from typing import Optional
+
 import openai
 
 from src.config.settings import ConfigurationError
@@ -15,7 +17,7 @@ class OpenAIClient(LLMClient):
         self,
         api_key: str,
         model: str,
-        base_url: str | None = None,
+        base_url: Optional[str] = None,
     ) -> None:
         if not api_key:
             raise ConfigurationError(f"{self._KEY_ENV_NAME} is required for AI features")
