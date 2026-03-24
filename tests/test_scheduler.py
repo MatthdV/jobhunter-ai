@@ -95,9 +95,16 @@ class TestJobSchedulerInit:
 
     def test_init_raises_without_scorer(self) -> None:
         """Scheduler cannot operate without a scoring engine."""
-        with pytest.raises((ConfigurationError, TypeError)):
-            from src.scheduler.job_scheduler import JobScheduler
-            JobScheduler()  # no injected components, no real config
+        from unittest.mock import patch
+
+        with patch("src.scheduler.job_scheduler.settings") as mock_settings:
+            mock_settings.is_ai_configured = False
+            mock_settings.dry_run = True
+            mock_settings.max_applications_per_day = 10
+            mock_settings.is_telegram_configured = False
+            with pytest.raises((ConfigurationError, TypeError)):
+                from src.scheduler.job_scheduler import JobScheduler
+                JobScheduler()  # no injected components, no real config
 
 
 # ---------------------------------------------------------------------------
