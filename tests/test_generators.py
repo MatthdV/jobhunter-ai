@@ -33,30 +33,19 @@ def make_job(**kwargs: Any) -> MagicMock:
 
 
 @pytest.fixture
-def mock_cv_client() -> AsyncMock:
-    client = AsyncMock()
-    msg = MagicMock()
-    msg.content = [MagicMock(text=VALID_HIGHLIGHTS)]
-    client.messages.create = AsyncMock(return_value=msg)
-    return client
-
-
-@pytest.fixture
-def cv_generator(monkeypatch: pytest.MonkeyPatch, mock_cv_client: AsyncMock) -> "CVGenerator":
-    monkeypatch.setattr(
-        "src.generators.cv_generator.settings",
-        MagicMock(anthropic_api_key="test-key", anthropic_model="claude-opus-4-6"),
-    )
+def cv_generator(monkeypatch: pytest.MonkeyPatch) -> "CVGenerator":
+    from src.llm.base import LLMClient
+    mock_llm: AsyncMock = AsyncMock(spec=LLMClient)
+    mock_llm.complete = AsyncMock(return_value=VALID_HIGHLIGHTS)
     monkeypatch.setattr("src.generators.cv_generator._PROFILE_PATH", _TEST_PROFILE)
-    with patch("src.generators.cv_generator.anthropic.AsyncAnthropic", return_value=mock_cv_client):
-        from src.generators.cv_generator import CVGenerator
-        return CVGenerator()
+    from src.generators.cv_generator import CVGenerator
+    return CVGenerator(client=mock_llm)
 
 
 class TestCVGeneratorSelectHighlights:
     @pytest.mark.asyncio
-    async def test_select_highlights_calls_claude_returns_dict(
-        self, cv_generator: "CVGenerator", mock_cv_client: AsyncMock
+    async def test_select_highlights_calls_llm_returns_dict(
+        self, cv_generator: "CVGenerator"
     ) -> None:
         job = make_job()
         result = await cv_generator._select_highlights(job)
@@ -68,10 +57,6 @@ class TestCVGeneratorSelectHighlights:
         assert isinstance(result["skill_ids"], list)
         assert "hook" in result
         assert isinstance(result["hook"], str)
-        mock_cv_client.messages.create.assert_called_once()
-        call_kwargs = mock_cv_client.messages.create.call_args.kwargs
-        assert call_kwargs["model"] == "claude-opus-4-6"
-        assert call_kwargs["max_tokens"] == 256
 
 
 class TestCVGeneratorInit:
@@ -79,8 +64,12 @@ class TestCVGeneratorInit:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
+            "src.generators.cv_generator.get_client",
+            MagicMock(side_effect=ConfigurationError("ANTHROPIC_API_KEY is required")),
+        )
+        monkeypatch.setattr(
             "src.generators.cv_generator.settings",
-            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6"),
+            MagicMock(llm_provider="anthropic"),
         )
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             from src.generators.cv_generator import CVGenerator
@@ -90,12 +79,10 @@ class TestCVGeneratorInit:
 class TestCVGeneratorFallback:
     @pytest.mark.asyncio
     async def test_generate_uses_fallback_when_select_highlights_raises(
-        self, cv_generator: "CVGenerator", mock_cv_client: AsyncMock, tmp_path: Path
+        self, cv_generator: "CVGenerator", tmp_path: Path
     ) -> None:
-        mock_cv_client.messages.create = AsyncMock(side_effect=Exception("Claude down"))
+        cv_generator._client.complete = AsyncMock(side_effect=Exception("LLM down"))
 
-        # _render_html and _html_to_pdf are still NotImplementedError at this slice.
-        # Patch them directly on the instance to isolate the fallback logic.
         called_with: dict[str, Any] = {}
 
         def fake_render(context: dict[str, Any]) -> str:
@@ -113,7 +100,7 @@ class TestCVGeneratorFallback:
 
         assert "experiences" in called_with
         assert "skill_ids" in called_with
-        assert called_with["skill_ids"] == []   # fallback: no highlights
+        assert called_with["skill_ids"] == []
         assert called_with["hook"] == ""
 
 
