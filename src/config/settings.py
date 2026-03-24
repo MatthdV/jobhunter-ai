@@ -57,12 +57,8 @@ class Settings(BaseSettings):
     linkedin_password: str = Field("", description="LinkedIn account password")
 
     # --- Indeed API ---
-    indeed_api_key: str = Field(
-        "", description="RapidAPI key for JSearch (Indeed) API"
-    )
-    indeed_mode: str = Field(
-        "api", description='Indeed scraper backend: "api" | "playwright"'
-    )
+    indeed_api_key: str = Field("", description="RapidAPI key for JSearch (Indeed) API")
+    indeed_mode: str = Field("api", description='Indeed scraper backend: "api" | "playwright"')
 
     # --- Database ---
     database_url: str = Field("sqlite:///./jobhunter.db", description="SQLAlchemy database URL")
