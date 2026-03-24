@@ -1050,3 +1050,209 @@ class TestIndeedApiParseRaw:
 
         with pytest.raises(ParseError):
             await self.scraper._parse_raw({"job_id": "missing"})
+
+
+# ---------------------------------------------------------------------------
+# Task — IndeedApiScraper._fetch_raw + error handling
+# ---------------------------------------------------------------------------
+
+class TestIndeedApiFetchRaw:
+    def setup_method(self) -> None:
+        from src.scrapers.indeed_api import IndeedApiScraper
+        from src.scrapers.base import _TokenBucket
+
+        self.scraper = IndeedApiScraper.__new__(IndeedApiScraper)
+        self.scraper.headless = True
+        self.scraper._token_bucket = _TokenBucket(60, 60 / 3600)
+        self.scraper._api_key = "test-key"
+        self.scraper._client = _MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_returns_list_of_dicts(self) -> None:
+        fixture = _json.loads((_INDEED_API_FIXTURES / "search_results.json").read_text())
+        mock_resp = _MagicMock()
+        mock_resp.raise_for_status = _MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json = _MagicMock(return_value=fixture)
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        results = await self.scraper._fetch_raw(
+            keywords=["automation"],
+            location="remote",
+            filters=ScraperFilters(),
+            limit=50,
+        )
+        assert isinstance(results, list)
+        assert all(isinstance(r, dict) for r in results)
+        assert all("job_id" in r for r in results)
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_respects_limit(self) -> None:
+        fixture = _json.loads((_INDEED_API_FIXTURES / "search_results.json").read_text())
+        mock_resp = _MagicMock()
+        mock_resp.raise_for_status = _MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json = _MagicMock(return_value=fixture)
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        results = await self.scraper._fetch_raw(
+            keywords=["automation"],
+            location="remote",
+            filters=ScraperFilters(),
+            limit=1,
+        )
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_429_raises_rate_limit_error(self) -> None:
+        from src.scrapers.exceptions import RateLimitError
+        mock_resp = _MagicMock()
+        mock_resp.status_code = 429
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        with pytest.raises(RateLimitError):
+            await self.scraper._fetch_raw(
+                keywords=["automation"],
+                location="remote",
+                filters=ScraperFilters(),
+                limit=10,
+            )
+
+    @pytest.mark.asyncio
+    async def test_fetch_raw_401_raises_parse_error(self) -> None:
+        from src.scrapers.exceptions import ParseError
+        mock_resp = _MagicMock()
+        mock_resp.status_code = 401
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        with pytest.raises(ParseError):
+            await self.scraper._fetch_raw(
+                keywords=["automation"],
+                location="remote",
+                filters=ScraperFilters(),
+                limit=10,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Task — IndeedApiScraper.search() integration + init guard
+# ---------------------------------------------------------------------------
+
+class TestIndeedApiSearch:
+    @pytest.mark.asyncio
+    async def test_search_returns_list_of_jobs(self) -> None:
+        from src.scrapers.indeed_api import IndeedApiScraper
+        from src.storage.models import Job
+
+        search_fixture = _json.loads(
+            (_INDEED_API_FIXTURES / "search_results.json").read_text()
+        )
+
+        async def mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return search_fixture["data"][:1]  # one job
+
+        detail_resp = _make_mock_response(_INDEED_API_FIXTURES / "job_detail.json")
+        scraper = IndeedApiScraper.__new__(IndeedApiScraper)
+        scraper.headless = True
+        from src.scrapers.base import _TokenBucket
+        scraper._token_bucket = _TokenBucket(3600, 1.0)
+        scraper._api_key = "test-key"
+        scraper._client = _MagicMock()
+        scraper._client.get = _AsyncMock(return_value=detail_resp)
+
+        with patch.object(scraper, "_fetch_raw", side_effect=mock_fetch_raw):
+            results = await scraper.search(keywords=["revops"])
+
+        assert len(results) == 1
+        assert all(isinstance(j, Job) for j in results)
+
+    @pytest.mark.asyncio
+    async def test_search_deduplication_in_batch(self) -> None:
+        from src.scrapers.indeed_api import IndeedApiScraper
+
+        search_fixture = _json.loads(
+            (_INDEED_API_FIXTURES / "search_results.json").read_text()
+        )
+        same_raw = search_fixture["data"][:1] * 2  # duplicated
+
+        detail_resp = _make_mock_response(_INDEED_API_FIXTURES / "job_detail.json")
+        scraper = IndeedApiScraper.__new__(IndeedApiScraper)
+        scraper.headless = True
+        from src.scrapers.base import _TokenBucket
+        scraper._token_bucket = _TokenBucket(3600, 1.0)
+        scraper._api_key = "test-key"
+        scraper._client = _MagicMock()
+        scraper._client.get = _AsyncMock(return_value=detail_resp)
+
+        async def mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+            return same_raw
+
+        with patch.object(scraper, "_fetch_raw", side_effect=mock_fetch_raw):
+            results = await scraper.search(keywords=["revops"])
+
+        assert len(results) == 1
+
+
+class TestIndeedApiInit:
+    def test_missing_api_key_raises_configuration_error(self) -> None:
+        from src.config.settings import ConfigurationError
+        from src.scrapers.indeed_api import IndeedApiScraper
+        import os
+
+        # Ensure env var is absent
+        old = os.environ.pop("INDEED_API_KEY", None)
+        try:
+            with pytest.raises(ConfigurationError, match="INDEED_API_KEY"):
+                IndeedApiScraper(api_key="")
+        finally:
+            if old is not None:
+                os.environ["INDEED_API_KEY"] = old
+
+    def test_api_key_injected_directly_does_not_raise(self) -> None:
+        from src.scrapers.indeed_api import IndeedApiScraper
+        scraper = IndeedApiScraper(api_key="test-key-direct")
+        assert scraper._api_key == "test-key-direct"
+
+
+# ---------------------------------------------------------------------------
+# Task — get_indeed_scraper() factory
+# ---------------------------------------------------------------------------
+
+class TestGetIndeedScraperFactory:
+    def test_returns_api_scraper_when_mode_is_api(self) -> None:
+        from src.scrapers import get_indeed_scraper
+        from src.scrapers.indeed_api import IndeedApiScraper
+        import os
+
+        old_mode = os.environ.get("INDEED_MODE")
+        old_key = os.environ.get("INDEED_API_KEY")
+        os.environ["INDEED_MODE"] = "api"
+        os.environ["INDEED_API_KEY"] = "test-key"
+        try:
+            scraper = get_indeed_scraper()
+            assert isinstance(scraper, IndeedApiScraper)
+        finally:
+            if old_mode is None:
+                os.environ.pop("INDEED_MODE", None)
+            else:
+                os.environ["INDEED_MODE"] = old_mode
+            if old_key is None:
+                os.environ.pop("INDEED_API_KEY", None)
+            else:
+                os.environ["INDEED_API_KEY"] = old_key
+
+    def test_returns_playwright_scraper_when_mode_is_playwright(self) -> None:
+        from src.scrapers import get_indeed_scraper
+        from src.scrapers.indeed import IndeedScraper
+        import os
+
+        old = os.environ.get("INDEED_MODE")
+        os.environ["INDEED_MODE"] = "playwright"
+        try:
+            scraper = get_indeed_scraper()
+            assert isinstance(scraper, IndeedScraper)
+        finally:
+            if old is None:
+                os.environ.pop("INDEED_MODE", None)
+            else:
+                os.environ["INDEED_MODE"] = old
