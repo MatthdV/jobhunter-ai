@@ -11,11 +11,11 @@ class MistralClient(LLMClient):
         if not api_key:
             raise ConfigurationError("MISTRAL_API_KEY is required for AI features")
         self._model = model
-        import mistralai  # deferred import — mistralai is optional
-        self._raw = mistralai.Mistral(api_key=api_key)
+        from mistralai.client import Mistral  # deferred import — mistralai is optional
+        self._raw = Mistral(api_key=api_key)
 
     async def complete(self, prompt: str, max_tokens: int, system: str = "") -> str:
-        from mistralai.models import SystemMessage, UserMessage
+        from mistralai.client.models import SystemMessage, UserMessage
         messages = []
         if system:
             messages.append(SystemMessage(content=system))
