@@ -905,3 +905,34 @@ class TestWithRetry:
             await self.scraper._with_retry(track_calls, max_attempts=3)
 
         assert len(call_log) == 3
+
+
+# ---------------------------------------------------------------------------
+# Task — Settings: indeed_api_key + indeed_mode
+# ---------------------------------------------------------------------------
+
+
+class TestIndeedApiSettings:
+    def test_indeed_api_key_default_is_empty(self) -> None:
+        from src.config.settings import Settings
+        s = Settings()
+        assert s.indeed_api_key == ""
+
+    def test_indeed_mode_default_is_api(self) -> None:
+        from src.config.settings import Settings
+        s = Settings()
+        assert s.indeed_mode == "api"
+
+    def test_indeed_mode_can_be_playwright(self) -> None:
+        from src.config.settings import Settings
+        import os
+        old = os.environ.get("INDEED_MODE")
+        os.environ["INDEED_MODE"] = "playwright"
+        try:
+            s = Settings()
+            assert s.indeed_mode == "playwright"
+        finally:
+            if old is None:
+                del os.environ["INDEED_MODE"]
+            else:
+                os.environ["INDEED_MODE"] = old
