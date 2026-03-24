@@ -1,13 +1,16 @@
 """Tests for CV and cover letter generators — Phase 3."""
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.config.settings import ConfigurationError
 
+if TYPE_CHECKING:
+    from src.generators.cover_letter import CoverLetterGenerator
+    from src.generators.cv_generator import CVGenerator
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -15,7 +18,9 @@ from src.config.settings import ConfigurationError
 
 _TEST_PROFILE = Path(__file__).parent / "fixtures" / "test_profile.yaml"
 
-VALID_HIGHLIGHTS = '{"experience_ids": ["exp_acme_automation"], "skill_ids": ["n8n"], "hook": "Great fit."}'
+VALID_HIGHLIGHTS = (
+    '{"experience_ids": ["exp_acme_automation"], "skill_ids": ["n8n"], "hook": "Great fit."}'
+)
 
 
 def make_job(**kwargs: Any) -> MagicMock:
@@ -210,7 +215,8 @@ class TestCoverLetterDetectLanguage:
         job = make_job(
             description=(
                 "We are looking for a senior automation engineer to join our platform team. "
-                "You will be responsible for building and maintaining our workflow automation systems."
+                "You will be responsible for building and maintaining "
+                "our workflow automation systems."
             )
         )
         assert cl_generator._detect_language(job) == "en"
@@ -251,7 +257,10 @@ class TestCoverLetterBuildPrompt:
         self, cl_generator: "CoverLetterGenerator"
     ) -> None:
         job = make_job(
-            description="We are looking for an engineer to join our team and build automation workflows."
+            description=(
+                "We are looking for an engineer to join our team "
+                "and build automation workflows."
+            )
         )
         prompt = cl_generator._build_prompt(job)
         assert "English" in prompt or "english" in prompt.lower()

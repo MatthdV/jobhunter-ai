@@ -83,9 +83,9 @@ class CVGenerator:
 
         html = self._render_html(context)
 
-        company_name = job.company.name if job.company else "unknown"
+        company_name = str(job.company.name) if job.company else "unknown"
         filename = (
-            f"cv_{_slug(job.title)}_{_slug(company_name)}_{date.today().strftime('%Y%m%d')}.pdf"
+            f"cv_{_slug(str(job.title))}_{_slug(company_name)}_{date.today().strftime('%Y%m%d')}.pdf"
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         return self._html_to_pdf(html, output_dir / filename)
@@ -124,13 +124,13 @@ class CVGenerator:
         if data is None:
             raise ValueError(f"Could not parse JSON from _select_highlights: {text!r}")
 
-        return data  # type: ignore[return-value]
+        return data
 
     def _render_html(self, context: dict[str, Any]) -> str:
         template = self._jinja_env.get_template("cv.html.jinja2")
         return template.render(**context)
 
     def _html_to_pdf(self, html: str, output_path: Path) -> Path:
-        from weasyprint import HTML  # type: ignore[import-untyped]
+        from weasyprint import HTML
         HTML(string=html).write_pdf(str(output_path))
         return output_path

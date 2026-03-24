@@ -21,21 +21,31 @@ class AnthropicClient(LLMClient):
 
     async def complete(self, prompt: str, max_tokens: int, system: str = "") -> str:
         last_error: anthropic.RateLimitError | None = None
+        messages: list[anthropic.types.MessageParam] = [
+            {"role": "user", "content": prompt}
+        ]
         for delay in _RETRY_DELAYS:
             if delay:
                 await asyncio.sleep(delay)
             try:
-                kwargs: dict[str, object] = {
-                    "model": self._model,
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}],
-                }
                 if system:
-                    kwargs["system"] = system
-                response = await self._raw.messages.create(**kwargs)
-                return next(
-                    block.text for block in response.content if hasattr(block, "text")
+                    response = await self._raw.messages.create(
+                        model=self._model,
+                        max_tokens=max_tokens,
+                        messages=messages,
+                        system=system,
+                    )
+                else:
+                    response = await self._raw.messages.create(
+                        model=self._model,
+                        max_tokens=max_tokens,
+                        messages=messages,
+                    )
+                text = next(
+                    (block.text for block in response.content if hasattr(block, "text")),
+                    "",
                 )
+                return str(text)
             except anthropic.RateLimitError as exc:
                 last_error = exc
         raise last_error  # type: ignore[misc]

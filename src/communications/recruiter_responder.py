@@ -81,7 +81,9 @@ class RecruiterResponder:
                 }
             ],
         )
-        return resp.content[0].text.strip().lower()
+        block = resp.content[0]
+        text = block.text if hasattr(block, "text") else ""
+        return text.strip().lower()
 
     # ------------------------------------------------------------------
     # Slice 32 — handle + draft_interview_reply + detect_scam
@@ -120,7 +122,9 @@ class RecruiterResponder:
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.content[0].text.strip()
+        block = resp.content[0]
+        text = block.text if hasattr(block, "text") else ""
+        return text.strip()
 
     async def detect_scam(self, message: EmailMessage) -> bool:
         """Return True if the message shows scam indicators."""
@@ -137,7 +141,9 @@ class RecruiterResponder:
                 }
             ],
         )
-        return resp.content[0].text.strip().lower() == "true"
+        block = resp.content[0]
+        text = block.text if hasattr(block, "text") else ""
+        return text.strip().lower() == "true"
 
     async def _draft_info_reply(self, message: EmailMessage) -> str:
         """Generate a reply to an information request using profile data."""
@@ -155,4 +161,6 @@ class RecruiterResponder:
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.content[0].text.strip()
+        block = resp.content[0]
+        text = block.text if hasattr(block, "text") else ""
+        return text.strip()

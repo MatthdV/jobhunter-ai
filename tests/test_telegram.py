@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import Generator
-from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,6 +11,8 @@ from src.config.settings import ConfigurationError
 from src.storage.database import configure, drop_all, get_session, init_db
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus
 
+if TYPE_CHECKING:
+    from src.communications.telegram_bot import TelegramBot
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -161,7 +163,11 @@ class TestNotifyNewMatch:
             await telegram_bot.notify_new_match(job)
 
         call_kwargs = mock_bot.send_message.call_args
-        text = call_kwargs.kwargs.get("text") or call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs["text"]
+        text = (
+            call_kwargs.kwargs.get("text") or call_kwargs.args[0]
+            if call_kwargs.args
+            else call_kwargs.kwargs["text"]
+        )
         assert "Automation Engineer" in text
         assert "87" in text  # score
 
@@ -190,8 +196,6 @@ class TestRequestApproval:
                 job = session.get(Job, job_id)
                 app = session.get(Application, app_id)
                 # Simulate immediate approval by resolving the future
-                loop = asyncio.get_event_loop()
-
                 async def _approve() -> None:
                     await asyncio.sleep(0.01)
                     telegram_bot._pending[app.id].set_result(True)
