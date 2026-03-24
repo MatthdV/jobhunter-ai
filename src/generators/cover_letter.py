@@ -1,14 +1,15 @@
-"""Cover letter generation using Claude — human tone, no buzzwords."""
+"""Cover letter generation using an LLM — human tone, no buzzwords."""
 
 import logging
 import re
 from pathlib import Path
 from typing import Any, Literal
 
-import anthropic
 import yaml
 
-from src.config.settings import ConfigurationError, settings
+from src.config.settings import settings
+from src.llm.base import LLMClient
+from src.llm.factory import get_client
 from src.storage.models import Application, Job
 
 logger = logging.getLogger(__name__)
@@ -29,27 +30,25 @@ _ENGLISH_FUNCTION_WORDS: frozenset[str] = frozenset([
     "who", "what", "which", "but", "not", "or", "if", "on", "so", "all",
     "more", "also", "when", "than", "then", "into", "about", "up", "out",
 ])
-_ENGLISH_THRESHOLD: float = 0.25  # validated: FR max 0.23, EN min 0.36
+_ENGLISH_THRESHOLD: float = 0.25
 
 
 class CoverLetterGenerator:
     """Generate a personalised cover letter for a specific job offer."""
 
-    def __init__(self) -> None:
-        if not settings.anthropic_api_key:
-            raise ConfigurationError("ANTHROPIC_API_KEY is required for cover letter generation")
+    def __init__(self, client: LLMClient | None = None) -> None:
+        if client is None:
+            client = get_client(settings.llm_provider)
+        self._client = client
         with _PROFILE_PATH.open() as fh:
             self._profile: dict[str, Any] = yaml.safe_load(fh)
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def generate(self, job: Job) -> str:
         """Generate a cover letter text for the given job."""
-        response = await self._client.messages.create(
-            model=settings.anthropic_model,
+        return await self._client.complete(
+            prompt=self._build_prompt(job),
             max_tokens=_CL_MAX_TOKENS,
-            messages=[{"role": "user", "content": self._build_prompt(job)}],
         )
-        return next(block.text for block in response.content if hasattr(block, "text"))
 
     async def refine(self, application: Application, feedback: str) -> str:
         """Refine an existing cover letter based on human feedback."""
@@ -68,15 +67,12 @@ class CoverLetterGenerator:
             "Revise the letter above according to the feedback. "
             "Keep the same language, length, and tone constraints."
         )
-        response = await self._client.messages.create(
-            model=settings.anthropic_model,
+        return await self._client.complete(
+            prompt=prompt,
             max_tokens=_CL_MAX_TOKENS,
-            messages=[{"role": "user", "content": prompt}],
         )
-        return next(block.text for block in response.content if hasattr(block, "text"))
 
     def _build_prompt(self, job: Job) -> str:
-        """Build the generation prompt from job data and candidate profile."""
         lang = self._detect_language(job)
         lang_str = "French" if lang == "fr" else "English"
 
@@ -112,7 +108,6 @@ class CoverLetterGenerator:
         )
 
     def _detect_language(self, job: Job) -> Literal["fr", "en"]:
-        """Detect whether the job posting is in French or English."""
         description = job.description or ""
         if not description.strip():
             return "fr"
