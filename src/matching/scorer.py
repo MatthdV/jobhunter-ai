@@ -1,4 +1,4 @@
-"""LLM-based job offer scorer using the Claude API."""
+"""LLM-based job offer scorer."""
 
 import asyncio
 import contextlib
@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import anthropic
 import yaml
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.config.settings import ConfigurationError, settings
+from src.config.settings import settings
+from src.llm.base import LLMClient
+from src.llm.factory import get_client
 from src.storage.models import Job, JobStatus, MatchResult
 
 _PROFILE_PATH = Path(__file__).parent.parent / "config" / "profile.yaml"
@@ -40,7 +41,7 @@ class ScoreResult:
 
 
 class ScoringError(Exception):
-    """Raised when Claude's response cannot be parsed into a ScoreResult."""
+    """Raised when the LLM response cannot be parsed into a ScoreResult."""
 
     def __init__(self, message: str, raw: str = "") -> None:
         super().__init__(message)
@@ -48,36 +49,22 @@ class ScoringError(Exception):
 
 
 class Scorer:
-    """Score job offers against the candidate profile using Claude."""
+    """Score job offers against the candidate profile using an LLM."""
 
-    def __init__(self) -> None:
-        if not settings.anthropic_api_key:
-            raise ConfigurationError("ANTHROPIC_API_KEY is required for scoring")
+    def __init__(self, client: LLMClient | None = None) -> None:
+        if client is None:
+            client = get_client(settings.llm_provider)
+        self._client = client
         with _PROFILE_PATH.open() as fh:
             self._profile: dict[str, Any] = yaml.safe_load(fh)
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def score(self, job: Job) -> ScoreResult:
-        delays = [0, 2, 4]
-        last_error: anthropic.RateLimitError | None = None
-        for delay in delays:
-            if delay:
-                await asyncio.sleep(delay)
-            try:
-                response = await self._client.messages.create(
-                    model=settings.anthropic_model,
-                    max_tokens=512,
-                    system=_SYSTEM_MESSAGE,
-                    messages=[{"role": "user", "content": self._build_prompt(job)}],
-                )
-                text = next(
-                    block.text for block in response.content
-                    if hasattr(block, "text")
-                )
-                return self._parse_response(text)
-            except anthropic.RateLimitError as exc:
-                last_error = exc
-        raise last_error  # type: ignore[misc]
+        text = await self._client.complete(
+            prompt=self._build_prompt(job),
+            max_tokens=512,
+            system=_SYSTEM_MESSAGE,
+        )
+        return self._parse_response(text)
 
     async def score_and_persist(self, job: Job, session: Session) -> MatchResult:
         result = await self.score(job)
@@ -86,12 +73,14 @@ class Scorer:
             select(MatchResult).where(MatchResult.job_id == job.id)
         ).scalar_one_or_none()
 
+        model_label = settings.llm_model or f"{settings.llm_provider}/default"
+
         if existing:
             existing.score = result.score  # type: ignore[assignment]
             existing.reasoning = result.reasoning  # type: ignore[assignment]
             existing.strengths_json = json.dumps(result.strengths)  # type: ignore[assignment]
             existing.concerns_json = json.dumps(result.concerns)  # type: ignore[assignment]
-            existing.model_used = settings.anthropic_model  # type: ignore[assignment]
+            existing.model_used = model_label  # type: ignore[assignment]
             match_result = existing
         else:
             match_result = MatchResult(
@@ -100,7 +89,7 @@ class Scorer:
                 reasoning=result.reasoning,
                 strengths_json=json.dumps(result.strengths),
                 concerns_json=json.dumps(result.concerns),
-                model_used=settings.anthropic_model,
+                model_used=model_label,
             )
             session.add(match_result)
 

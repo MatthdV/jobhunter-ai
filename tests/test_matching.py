@@ -2,21 +2,16 @@
 
 import json
 from collections.abc import Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import anthropic
-import httpx
 import pytest
 from sqlalchemy import select
 
 from src.config.settings import ConfigurationError
+from src.llm.base import LLMClient
 from src.matching.scorer import Scorer, ScoreResult, ScoringError
 from src.storage.database import configure, drop_all, get_session, init_db
 from src.storage.models import Job, JobStatus, MatchResult
-
-_RATE_LIMIT_RESPONSE = httpx.Response(
-    429, request=httpx.Request("GET", "https://api.anthropic.com")
-)
 
 # ---------------------------------------------------------------------------
 # Shared test data
@@ -66,28 +61,21 @@ def setup_db() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def mock_client() -> AsyncMock:
-    """Mocked AsyncAnthropic client that returns VALID_RESPONSE by default."""
-    client = AsyncMock()
-    msg = MagicMock()
-    msg.content = [MagicMock(text=VALID_RESPONSE)]
-    client.messages.create = AsyncMock(return_value=msg)
+def mock_llm_client() -> AsyncMock:
+    """Mocked LLMClient.complete() that returns VALID_RESPONSE by default."""
+    client = AsyncMock(spec=LLMClient)
+    client.complete = AsyncMock(return_value=VALID_RESPONSE)
     return client
 
 
 @pytest.fixture
-def scorer(monkeypatch: pytest.MonkeyPatch, mock_client: AsyncMock) -> Scorer:
-    """Scorer with mocked settings (no real API key) and mocked Anthropic client."""
+def scorer(monkeypatch: pytest.MonkeyPatch, mock_llm_client: AsyncMock) -> Scorer:
+    """Scorer with mocked settings and injected mock LLMClient."""
     monkeypatch.setattr(
         "src.matching.scorer.settings",
-        MagicMock(
-            anthropic_api_key="test-key",
-            anthropic_model="claude-opus-4-6",
-            min_match_score=80,
-        ),
+        MagicMock(min_match_score=80, llm_provider="anthropic", llm_model="claude-opus-4-6"),
     )
-    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
-        return Scorer()
+    return Scorer(client=mock_llm_client)
 
 
 # ---------------------------------------------------------------------------
@@ -146,10 +134,14 @@ class TestScorer:
     def test_init_raises_configuration_error_without_api_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Scorer.__init__ raises ConfigurationError when API key is empty."""
+        """Scorer.__init__ raises ConfigurationError when get_client raises."""
+        monkeypatch.setattr(
+            "src.matching.scorer.get_client",
+            MagicMock(side_effect=ConfigurationError("ANTHROPIC_API_KEY is required")),
+        )
         monkeypatch.setattr(
             "src.matching.scorer.settings",
-            MagicMock(anthropic_api_key="", anthropic_model="claude-opus-4-6", min_match_score=80),
+            MagicMock(llm_provider="anthropic", min_match_score=80),
         )
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             Scorer()
@@ -174,12 +166,10 @@ class TestScoreBatch:
 
     @pytest.mark.asyncio
     async def test_score_batch_raises_on_any_scoring_error(
-        self, scorer: Scorer, mock_client: AsyncMock
+        self, scorer: Scorer, mock_llm_client: AsyncMock
     ) -> None:
         """Fail-fast: if one job raises ScoringError, score_batch raises."""
-        mock_client.messages.create = AsyncMock(
-            return_value=MagicMock(content=[MagicMock(text="not json")])
-        )
+        mock_llm_client.complete = AsyncMock(return_value="not json")
         with get_session() as session:
             jobs = [make_job(url=f"https://example.com/batch/{i}") for i in range(2)]
             for job in jobs:
@@ -205,7 +195,7 @@ class TestScoreAndPersist:
 
     @pytest.mark.asyncio
     async def test_score_and_persist_below_threshold_sets_skipped(
-        self, scorer: Scorer, mock_client: AsyncMock
+        self, scorer: Scorer, mock_llm_client: AsyncMock
     ) -> None:
         low_response = json.dumps({
             "score": 50,
@@ -213,9 +203,7 @@ class TestScoreAndPersist:
             "strengths": [],
             "concerns": ["No Python"],
         })
-        msg = MagicMock()
-        msg.content = [MagicMock(text=low_response)]
-        mock_client.messages.create = AsyncMock(return_value=msg)
+        mock_llm_client.complete = AsyncMock(return_value=low_response)
         with get_session() as session:
             job = make_job()
             session.add(job)
@@ -226,7 +214,7 @@ class TestScoreAndPersist:
 
     @pytest.mark.asyncio
     async def test_score_and_persist_upserts_existing_match_result(
-        self, scorer: Scorer, mock_client: AsyncMock
+        self, scorer: Scorer, mock_llm_client: AsyncMock
     ) -> None:
         """Second call updates existing MatchResult in-place instead of inserting."""
         with get_session() as session:
@@ -242,9 +230,7 @@ class TestScoreAndPersist:
                 "strengths": ["Python"],
                 "concerns": [],
             })
-            msg = MagicMock()
-            msg.content = [MagicMock(text=updated_response)]
-            mock_client.messages.create = AsyncMock(return_value=msg)
+            mock_llm_client.complete = AsyncMock(return_value=updated_response)
 
             await scorer.score_and_persist(job, session)
             assert job.match_result.id == first_id
@@ -257,44 +243,14 @@ class TestScoreAndPersist:
 
 class TestScore:
     @pytest.mark.asyncio
-    async def test_score_calls_claude_returns_score_result(
-        self, scorer: Scorer, mock_client: AsyncMock
+    async def test_score_calls_llm_returns_score_result(
+        self, scorer: Scorer, mock_llm_client: AsyncMock
     ) -> None:
         job = make_job()
         result = await scorer.score(job)
         assert isinstance(result, ScoreResult)
         assert result.score == 85.0
-        mock_client.messages.create.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_score_retries_on_rate_limit(
-        self, scorer: Scorer, mock_client: AsyncMock
-    ) -> None:
-        """score() retries on RateLimitError and succeeds on 3rd attempt."""
-        good_msg = MagicMock()
-        good_msg.content = [MagicMock(text=VALID_RESPONSE)]
-        rate_limit_error = anthropic.RateLimitError(
-            message="rate limit", response=_RATE_LIMIT_RESPONSE, body={}
-        )
-        mock_client.messages.create = AsyncMock(
-            side_effect=[rate_limit_error, rate_limit_error, good_msg]
-        )
-        with patch("asyncio.sleep"):
-            result = await scorer.score(job=make_job())
-        assert result.score == 85.0
-        assert mock_client.messages.create.call_count == 3
-
-    @pytest.mark.asyncio
-    async def test_score_raises_after_max_retries(
-        self, scorer: Scorer, mock_client: AsyncMock
-    ) -> None:
-        """score() propagates RateLimitError after 3 retries."""
-        rate_limit_error = anthropic.RateLimitError(
-            message="rate limit", response=_RATE_LIMIT_RESPONSE, body={}
-        )
-        mock_client.messages.create = AsyncMock(side_effect=rate_limit_error)
-        with patch("asyncio.sleep"), pytest.raises(anthropic.RateLimitError):
-            await scorer.score(job=make_job())
+        mock_llm_client.complete.assert_called_once()
 
 
 class TestParseResponse:
