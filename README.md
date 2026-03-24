@@ -1,131 +1,152 @@
-# 🎯 JobHunter AI
+# JobHunter AI
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Système de recherche d'emploi automatisé avec IA.
-
-## Vision
-
-Agent IA qui gère 100% du processus de recherche d'emploi : **Détection** → **Candidature** → **Négociation** → **Entretien**
+Système semi-autonome de recherche d'emploi piloté par IA. Scraping → matching → génération de candidatures personnalisées → validation humaine → suivi des réponses.
 
 Tu n'as qu'à **passer les entretiens**.
 
-## 🏗️ Architecture
+## Quick Start
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  PHASE 1: PRÉPARATION                                       │
-│  ├── Analyse Portfolio → Extraction compétences             │
-│  ├── Optimisation LinkedIn → Profil attractif               │
-│  └── Génération CVs → Versions adaptatives                  │
-├─────────────────────────────────────────────────────────────┤
-│  PHASE 2: RECHERCHE                                         │
-│  ├── Scraping LinkedIn, Indeed, WTTJ                        │
-│  ├── Matching IA → Score adéquation > 80%                   │
-│  └── Filtrage → Salaire, remote, stack technique            │
-├─────────────────────────────────────────────────────────────┤
-│  PHASE 3: CANDIDATURE (Semi-Auto)                           │
-│  ├── Génération CV personnalisé → Par offre                 │
-│  ├── Rédaction lettre motivation → Ton humain               │
-│  ├── Soumission → Validation humaine requise                │
-│  └── Suivi → Relances intelligentes                         │
-├─────────────────────────────────────────────────────────────┤
-│  PHASE 4: RÉPONSE & NÉGOCIATION                             │
-│  ├── Analyse réponses recruteurs                            │
-│  ├── Réponses automatiques → Questions courantes            │
-│  ├── Négociation salariale → Scripts                        │
-│  └── Détection scam → Filtre offres frauduleuses            │
-├─────────────────────────────────────────────────────────────┤
-│  PHASE 5: RDV & PRÉPARATION                                 │
-│  ├── Intégration Calendly → Booking auto                    │
-│  ├── Analyse entreprise → Rapport pré-entretien             │
-│  ├── Préparation questions → Tech + comportemental          │
-│  └── Briefing final → Récap Telegram + Email                │
-└─────────────────────────────────────────────────────────────┘
+```bash
+# 1. Cloner et installer
+git clone https://github.com/MatthdV/jobhunter-ai.git
+cd jobhunter-ai
+pip install -e ".[dev]"
+
+# 2. Configurer l'environnement
+cp .env.example .env
+# Remplir .env avec vos clés API (voir section Supported LLM Providers)
+
+# 3. Initialiser la base de données
+python -m src.main init-db
+
+# 4. Installer Playwright (scraping, première fois uniquement)
+playwright install chromium
+
+# 5. Scanner les offres
+python -m src.main scan --source wttj --limit 20
+
+# 6. Lancer le matching IA (score > 80%)
+python -m src.main match --min-score 80
+
+# 7. Générer les candidatures (dry-run par défaut)
+python -m src.main apply --dry-run
 ```
 
-## 📊 Configuration
+## Supported LLM Providers
 
-### Profil Cible
-- **Nom** : Matthieu de Villele
-- **Rôle** : Automation & AI Engineer / RevOps Consultant
-- **Secteurs** : FinTech, SaaS, Consulting
-- **Localisation** : Full Remote (Europe)
-- **Salaire visé** : 80k€+
+Choisir le provider via `LLM_PROVIDER` dans `.env` :
 
-### Sources d'Offres
-- LinkedIn Jobs
-- Indeed
-- Welcome to the Jungle
-- AngelList (startups)
-- WeWorkRemotely
+| Provider | `LLM_PROVIDER` | Modèle par défaut | Variable clé |
+|---|---|---|---|
+| Anthropic (Claude) | `anthropic` | `claude-opus-4-6` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | `gpt-4o` | `OPENAI_API_KEY` |
+| Mistral | `mistral` | `mistral-large-latest` | `MISTRAL_API_KEY` |
+| DeepSeek | `deepseek` | `deepseek-chat` | `DEEPSEEK_API_KEY` |
+| OpenRouter | `openrouter` | `openai/gpt-4o` | `OPENROUTER_API_KEY` |
 
-### Mode de Fonctionnement
-**Semi-automatique** : Chaque candidature est validée par l'utilisateur avant envoi.
+### Exemples `.env`
 
-## 🎯 Objectifs
+**Anthropic (défaut)**
+```env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**OpenAI**
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini   # optionnel, override le modèle par défaut
+```
+
+**Mistral**
+```env
+LLM_PROVIDER=mistral
+MISTRAL_API_KEY=...
+```
+
+**DeepSeek**
+```env
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-...
+```
+
+**OpenRouter** (accès à 100+ modèles : Llama, Gemini, Qwen, Kimi…)
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+LLM_MODEL=meta-llama/llama-3.1-70b-instruct
+```
+
+## Architecture
+
+```
+Phase 1 — Préparation  : Analyse profil, génération CV adaptatif
+Phase 2 — Recherche    : Scraping (LinkedIn, Indeed, WTTJ, AngelList), matching IA (score > 80%)
+Phase 3 — Candidature  : CV + lettre personnalisés → validation humaine → soumission
+Phase 4 — Réponse      : Réponses automatiques, détection scam, négociation salariale
+Phase 5 — RDV          : Intégration Calendly, briefing entreprise, préparation entretien
+```
+
+```
+src/
+├── main.py               # CLI Typer — point d'entrée
+├── config/
+│   ├── settings.py       # Pydantic Settings (charge .env)
+│   └── profile.yaml      # Profil candidat, rôles cibles, entreprises
+├── storage/
+│   ├── models.py         # SQLAlchemy ORM : Job, Application, Company, Recruiter
+│   └── database.py       # Engine, session factory, init_db(), health_check()
+├── scrapers/             # Phase 2 — BaseScraper + LinkedIn/Indeed/WTTJ
+├── matching/             # Phase 2 — Scorer (LLM), EmbeddingMatcher
+├── generators/           # Phase 3 — CVGenerator, CoverLetterGenerator
+├── communications/       # Phase 4 — EmailHandler, TelegramBot, RecruiterResponder
+├── scheduler/            # Phase 4 — JobScheduler orchestre toutes les phases
+└── analysis/             # Analyse de profil
+```
+
+## Commandes CLI
+
+```bash
+python -m src.main --help
+python -m src.main init-db                          # Initialiser la DB
+python -m src.main scan --source linkedin --limit 20  # Scraper les offres
+python -m src.main scan --source wttj --limit 50
+python -m src.main match                            # Scorer toutes les offres NEW
+python -m src.main match --min-score 80             # Seuil personnalisé
+python -m src.main apply --dry-run                  # Générer les candidatures (sans envoi)
+python -m src.main apply --live                     # Envoi réel (validation Telegram requise)
+```
+
+## Décisions de design
+
+- **Human-in-the-loop** : `TelegramBot.request_approval()` bloque avant tout envoi — ne jamais bypasser cette gate
+- **Dry-run par défaut** : `DRY_RUN=true` dans `.env` ; `--live` requis pour soumettre
+- **Cap journalier** : `MAX_APPLICATIONS_PER_DAY` protège contre les bans
+- **Seuil de matching** : seuls les jobs avec `match_score >= MIN_MATCH_SCORE` passent en candidature
+- **Source de vérité profil** : `src/config/profile.yaml` pilote le scoring, la génération CV et les keywords — modifier ici, pas dans le code
+- **Personnalisation** : chaque CV et lettre est adapté à l'offre via LLM — jamais de candidature générique
+
+## Tests
+
+```bash
+pytest                                  # Tous les tests
+pytest tests/test_scheduler.py -v      # Un seul fichier
+pytest -k "test_score"                 # Un test spécifique
+```
+
+## Objectifs KPI
 
 | KPI | Objectif |
 |-----|----------|
 | Offres analysées | 50/jour |
 | Candidatures envoyées | 5-10/jour |
-| Taux réponse | > 15% |
+| Taux de réponse | > 15% |
 | Entretiens obtenus | 2-3/semaine |
-| Temps économisé | 10h/semaine |
 
-## 🛠️ Stack Technique
+## Auteur
 
-| Composant | Technologie |
-|-----------|-------------|
-| Scraping | Playwright + Python |
-| Matching IA | Claude/GPT-4 + Embeddings |
-| Génération CV | LaTeX + Jinja2 |
-| Email | Gmail API |
-| Calendly | Calendly API |
-| Notifications | Telegram + Email |
-| Storage | Notion / PostgreSQL |
-
-## 🚀 Utilisation
-
-```bash
-# Installation
-git clone https://github.com/MatthdV/jobhunter-ai.git
-cd jobhunter-ai
-
-# Configuration
-export LINKEDIN_COOKIES="li_at=...; JSESSIONID=..."
-export CALENDLY_API_KEY="..."
-export GMAIL_CREDENTIALS="..."
-
-# Lancer
-python3 main.py --mode semi-auto
-```
-
-## ⚠️ Sécurité & Éthique
-
-- Max 20 candidatures/jour (évite ban LinkedIn)
-- Matching strict > 80% (pas de spam)
-- Validation humaine obligatoire
-- Stockage local chiffré
-
-## 📅 Roadmap
-
-- [x] Création architecture
-- [ ] Analyse portfolio GitHub
-- [ ] Optimisation LinkedIn
-- [ ] Module scraping offres
-- [ ] Système matching IA
-- [ ] Génération CV/Lettres
-- [ ] Intégration Calendly
-- [ ] Déploiement
-
-## 👨‍💻 Auteur
-
-**Matthieu de Villele** - Automation & AI Engineer
-- Portfolio: [matthieudevillele.com](https://matthieudevillele.com)
-- LinkedIn: [linkedin.com/in/matthieu-devillele](https://linkedin.com/in/matthieu-devillele)
-
----
-
-*Projet en cours de développement.*
+**Matthieu de Villele** — Automation & AI Engineer / RevOps Consultant
