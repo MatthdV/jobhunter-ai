@@ -924,8 +924,9 @@ class TestIndeedApiSettings:
         assert s.indeed_mode == "api"
 
     def test_indeed_mode_can_be_playwright(self) -> None:
-        from src.config.settings import Settings
         import os
+
+        from src.config.settings import Settings
         old = os.environ.get("INDEED_MODE")
         os.environ["INDEED_MODE"] = "playwright"
         try:
@@ -936,3 +937,116 @@ class TestIndeedApiSettings:
                 del os.environ["INDEED_MODE"]
             else:
                 os.environ["INDEED_MODE"] = old
+
+
+# ---------------------------------------------------------------------------
+# Task — IndeedApiScraper._parse_raw
+# ---------------------------------------------------------------------------
+
+import json as _json
+from pathlib import Path as _Path
+from unittest.mock import AsyncMock as _AsyncMock, MagicMock as _MagicMock
+
+_INDEED_API_FIXTURES = _Path(__file__).parent / "fixtures" / "indeed_api"
+
+
+def _make_mock_response(fixture_path: _Path) -> _MagicMock:
+    """Build a mock httpx response that returns fixture JSON."""
+    mock_response = _MagicMock()
+    mock_response.raise_for_status = _MagicMock()
+    mock_response.json = _MagicMock(return_value=_json.loads(fixture_path.read_text()))
+    return mock_response
+
+
+class TestIndeedApiParseRaw:
+    def setup_method(self) -> None:
+        from src.scrapers.indeed_api import IndeedApiScraper
+        from src.scrapers.base import _TokenBucket
+
+        self.scraper = IndeedApiScraper.__new__(IndeedApiScraper)
+        self.scraper.headless = True
+        # Full bucket (3600 tokens, rate=1/s) so _wait() never sleeps in tests
+        self.scraper._token_bucket = _TokenBucket(3600, 1.0)
+        # Inject mock httpx client
+        self.scraper._client = _MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_parse_complete_job(self) -> None:
+        detail_fixture = _INDEED_API_FIXTURES / "job_detail.json"
+        self.scraper._client.get = _AsyncMock(
+            return_value=_make_mock_response(detail_fixture)
+        )
+        raw = {"job_id": "eyJqb2JJZCI6ImFiYzEyMyJ9"}
+        job = await self.scraper._parse_raw(raw)
+
+        assert job.title == "Senior RevOps Engineer"
+        assert job.url == "https://fr.indeed.com/viewjob?jk=abc123"
+        assert job.source == "indeed_api"
+        assert job.salary_min == 80000
+        assert job.salary_max == 100000
+        assert job.contract_type == "CDI"
+        assert "Python" in (job.description or "")
+        assert job.location == "Paris, FR"
+
+    @pytest.mark.asyncio
+    async def test_parse_missing_salary(self) -> None:
+        detail_fixture = _INDEED_API_FIXTURES / "job_no_salary.json"
+        self.scraper._client.get = _AsyncMock(
+            return_value=_make_mock_response(detail_fixture)
+        )
+        raw = {"job_id": "eyJqb2JJZCI6ImRlZjQ1NiJ9"}
+        job = await self.scraper._parse_raw(raw)
+
+        assert job.salary_min is None
+        assert job.salary_max is None
+        assert job.salary_raw is None
+
+    @pytest.mark.asyncio
+    async def test_parse_contractor_mapped_to_freelance(self) -> None:
+        detail_fixture = _INDEED_API_FIXTURES / "job_no_salary.json"
+        self.scraper._client.get = _AsyncMock(
+            return_value=_make_mock_response(detail_fixture)
+        )
+        raw = {"job_id": "eyJqb2JJZCI6ImRlZjQ1NiJ9"}
+        job = await self.scraper._parse_raw(raw)
+
+        assert job.contract_type == "Freelance"
+
+    @pytest.mark.asyncio
+    async def test_parse_null_city_uses_country_only(self) -> None:
+        # Build a fixture with null job_city inline
+        mock_data = {
+            "status": "OK",
+            "data": [{
+                "job_id": "x",
+                "employer_name": "Co",
+                "job_title": "Engineer",
+                "job_description": "Full description here.",
+                "job_city": None,
+                "job_country": "FR",
+                "job_is_remote": True,
+                "job_min_salary": None,
+                "job_max_salary": None,
+                "job_salary_period": None,
+                "job_apply_link": "https://fr.indeed.com/viewjob?jk=x",
+                "job_employment_type": "FULLTIME",
+            }]
+        }
+        mock_resp = _MagicMock()
+        mock_resp.raise_for_status = _MagicMock()
+        mock_resp.json = _MagicMock(return_value=mock_data)
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        job = await self.scraper._parse_raw({"job_id": "x"})
+        assert job.location == "FR"
+
+    @pytest.mark.asyncio
+    async def test_parse_raises_parse_error_on_empty_data(self) -> None:
+        from src.scrapers.exceptions import ParseError
+        mock_resp = _MagicMock()
+        mock_resp.raise_for_status = _MagicMock()
+        mock_resp.json = _MagicMock(return_value={"status": "OK", "data": []})
+        self.scraper._client.get = _AsyncMock(return_value=mock_resp)
+
+        with pytest.raises(ParseError):
+            await self.scraper._parse_raw({"job_id": "missing"})
