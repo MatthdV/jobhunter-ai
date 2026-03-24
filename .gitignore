@@ -45,3 +45,7 @@ output/
 .idea/
 .vscode/
 *.swp
+
+# Local notes & analysis
+jobhunter-ai_analyse_et_consignes.md
+docs/superpowers/
