@@ -1,0 +1,31 @@
+services:
+  jobhunter:
+    build: .
+    container_name: jobhunter-ai
+    env_file: .env
+    volumes:
+      - db_data:/data/db
+      - ./data/output:/data/output
+    environment:
+      - DATABASE_URL=sqlite:////data/db/jobhunter.db
+    restart: unless-stopped
+    command: ["python", "-m", "src.main", "--help"]
+
+  jobhunter-cron:
+    build: .
+    container_name: jobhunter-cron
+    env_file: .env
+    volumes:
+      - db_data:/data/db
+      - ./data/output:/data/output
+      - ./cron/jobhunter-cron:/etc/cron.d/jobhunter-cron:ro
+    environment:
+      - DATABASE_URL=sqlite:////data/db/jobhunter.db
+    restart: unless-stopped
+    command: >
+      sh -c "chmod 0644 /etc/cron.d/jobhunter-cron
+      && crontab /etc/cron.d/jobhunter-cron
+      && cron -f"
+
+volumes:
+  db_data:
