@@ -59,11 +59,23 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = Field("sqlite:///./jobhunter.db", description="SQLAlchemy database URL")
 
+    # --- API / Web ---
+    jwt_secret: str = Field("", description="JWT signing secret — min 32 chars for HS256")
+    fernet_key: str = Field(
+        "",
+        description='Fernet key for encrypting API keys — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"',
+    )
+
     # --- App behaviour ---
     log_level: str = Field("INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR")
     dry_run: bool = Field(True, description="If true, never actually submit applications")
     max_applications_per_day: int = Field(10, ge=1, le=50, description="Daily application cap")
     min_match_score: int = Field(80, ge=0, le=100, description="Minimum AI match score to consider")
+
+    @property
+    def is_jwt_configured(self) -> bool:
+        """True if jwt_secret is set and meets minimum length for HS256."""
+        return len(self.jwt_secret) >= 32
 
     @property
     def is_ai_configured(self) -> bool:
