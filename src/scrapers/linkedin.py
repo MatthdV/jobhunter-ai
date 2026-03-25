@@ -63,7 +63,6 @@ class LinkedInScraper(BaseScraper):
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._playwright_ctx: Any = None
-        self._stealth_fn: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -73,16 +72,15 @@ class LinkedInScraper(BaseScraper):
         _COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         self._playwright_ctx = await async_playwright().start()
-
-        try:
-            from playwright_stealth import stealth_async
-            self._stealth_fn = stealth_async
-        except ImportError:
-            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
-            self._stealth_fn = None
-
         self._browser = await self._playwright_ctx.chromium.launch(headless=self.headless)
         self._context = await self._browser.new_context()
+
+        # playwright-stealth v2: apply to context — all pages inherit evasions
+        try:
+            from playwright_stealth import Stealth
+            await Stealth().apply_stealth_async(self._context)
+        except ImportError:
+            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
 
         if _COOKIES_PATH.exists():
             cookies = json.loads(_COOKIES_PATH.read_text())
@@ -107,11 +105,13 @@ class LinkedInScraper(BaseScraper):
         return nav is not None
 
     def _has_credentials(self) -> bool:
-        return bool(os.getenv("LINKEDIN_EMAIL")) and bool(os.getenv("LINKEDIN_PASSWORD"))
+        from src.config.settings import settings
+        return bool(settings.linkedin_email) and bool(settings.linkedin_password)
 
     async def _run_login(self, page: Page) -> None:
-        email = os.getenv("LINKEDIN_EMAIL", "")
-        password = os.getenv("LINKEDIN_PASSWORD", "")
+        from src.config.settings import settings
+        email = settings.linkedin_email
+        password = settings.linkedin_password
 
         await page.goto("https://www.linkedin.com/login")
         await page.fill("#username", email)
@@ -157,9 +157,6 @@ class LinkedInScraper(BaseScraper):
         assert self._context is not None, "_setup() must be called first"
 
         page = await self._context.new_page()
-        if self._stealth_fn:
-            await self._stealth_fn(page)
-
         raw_items: list[dict[str, Any]] = []
 
         try:
@@ -190,9 +187,6 @@ class LinkedInScraper(BaseScraper):
                 # Fetch detail page for full description
                 await self._wait()
                 detail_page = await self._context.new_page()
-                if self._stealth_fn:
-                    await self._stealth_fn(detail_page)
-
                 try:
                     await detail_page.goto(job_url)
                     await detail_page.wait_for_load_state("networkidle")
