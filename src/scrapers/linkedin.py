@@ -101,7 +101,8 @@ class LinkedInScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     async def _is_authenticated(self, page: Page) -> bool:
-        nav = await page.query_selector("nav.global-nav")
+        # LinkedIn changed nav.global-nav to #global-nav (no longer <nav> tag)
+        nav = await page.query_selector("#global-nav, .global-nav")
         return nav is not None
 
     def _has_credentials(self) -> bool:
@@ -117,7 +118,7 @@ class LinkedInScraper(BaseScraper):
         await page.fill("#username", email)
         await page.fill("#password", password)
         await page.click('button[type="submit"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
 
         # Detect 2FA / CAPTCHA challenge pages
         url = page.url
@@ -131,6 +132,8 @@ class LinkedInScraper(BaseScraper):
 
     async def _authenticate(self, page: Page) -> None:
         """Ensure the page is authenticated. Raises AuthenticationError if not possible."""
+        import asyncio as _aio
+        await _aio.sleep(2)  # Let dynamic content render after domcontentloaded
         if await self._is_authenticated(page):
             return
 
@@ -170,7 +173,7 @@ class LinkedInScraper(BaseScraper):
 
             await self._wait()
             await page.goto(search_url)
-            await page.wait_for_load_state("networkidle")
+            await page.wait_for_load_state("domcontentloaded")
 
             html = await page.content()
             soup = BeautifulSoup(html, "lxml")
