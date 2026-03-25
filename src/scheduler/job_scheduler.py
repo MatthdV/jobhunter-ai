@@ -137,53 +137,69 @@ class JobScheduler:
         scrapers: list[Any] | None = None,
         countries: list[str] | None = None,
     ) -> int:
-        """Run all scrapers across configured countries. Returns count of new jobs."""
+        """Run all scrapers across keyword × country combinations.
+
+        Returns count of new jobs persisted. Deduplication is handled by
+        both BaseScraper (batch_seen) and the existing_urls set here.
+        """
         if not scrapers:
             return 0
 
+        profile = self._load_profile()
         if countries is None:
-            profile = self._load_profile()
             countries = profile.get("search", {}).get("countries", ["FR"])
+
+        keywords: list[str] = profile.get("search_keywords", ["automation"])
+        location: str = profile.get("search", {}).get("location", "remote")
 
         with get_session() as session:
             existing_urls: set[str] = {
                 url for (url,) in session.query(Job.url).all()
             }
 
-        profile = self._load_profile()
-        keywords = profile.get("search_keywords", ["automation"])
-        location = profile.get("search", {}).get("location", "remote")
-
         new_count = 0
         for scraper in scrapers:
             scraper_name = getattr(scraper, "source", "")
             supported = get_supported_countries(scraper_name)
-            for country in countries:
-                if supported and country not in supported:
-                    logger.info(
-                        "Scraper %s doesn't support %s — skipping", scraper_name, country,
-                    )
-                    continue
-                try:
-                    async with scraper:
-                        jobs = await scraper.search(
-                            keywords=keywords,
-                            location=location,
-                            limit=50,
-                            seen_urls=existing_urls,
-                            country_code=country,
-                        )
-                except Exception:
-                    logger.exception("Scraper %r raised an error for %s", scraper, country)
-                    continue
+            try:
+                async with scraper:
+                    for country in countries:
+                        if supported and country not in supported:
+                            logger.info(
+                                "Scraper %s doesn't support %s — skipping",
+                                scraper_name, country,
+                            )
+                            continue
+                        for kw in keywords:
+                            try:
+                                jobs = await scraper.search(
+                                    keywords=[kw],
+                                    location=location,
+                                    limit=50,
+                                    seen_urls=existing_urls,
+                                    country_code=country,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Scraper %s/%s [%s] error", scraper_name, country, kw,
+                                )
+                                continue
 
-                fresh = [j for j in jobs if j.url not in existing_urls]
-                if fresh:
-                    with get_session() as session:
-                        for job in fresh:
-                            session.add(job)
-                            existing_urls.add(job.url)
-                    new_count += len(fresh)
+                            fresh = [j for j in jobs if j.url not in existing_urls]
+                            if fresh:
+                                with get_session() as session:
+                                    for job in fresh:
+                                        session.add(job)
+                                        existing_urls.add(job.url)
+                                new_count += len(fresh)
+                            logger.info(
+                                "%s/%s [%s]: %d new, %d dupes",
+                                scraper_name, country, kw,
+                                len(fresh), len(jobs) - len(fresh),
+                            )
+            except Exception:
+                logger.exception("Scraper %s init error", scraper_name)
+                continue
 
         return new_count
 
