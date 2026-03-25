@@ -46,8 +46,8 @@ def scan(
     keywords = profile.get("search_keywords", ["automation", "n8n", "RevOps"])
 
     console.print(
-        f"[bold]Scanning[/bold] {sources} × {len(countries)} countries "
-        f"(limit={limit} per source per country)…"
+        f"[bold]Scanning[/bold] {sources} × {len(keywords)} keywords "
+        f"× {len(countries)} countries (limit={limit})…"
     )
 
     _scraper_map = {
@@ -73,44 +73,49 @@ def scan(
             supported = get_supported_countries(source)
             filters = ScraperFilters(remote_only=False)
 
-            for country in countries:
-                if supported and country not in supported:
-                    console.print(
-                        f"  [yellow]{source} doesn't support {country}, skipping[/yellow]"
-                    )
-                    continue
-                try:
-                    async with scraper_cls() as scraper:
-                        jobs = await scraper.search(
-                            keywords=keywords,
-                            location=location,
-                            filters=filters,
-                            limit=limit,
-                            seen_urls=existing_urls,
-                            country_code=country,
-                        )
-                except Exception as exc:
-                    console.print(f"[red]{source}/{country} error:[/red] {exc}")
-                    continue
+            try:
+                async with scraper_cls() as scraper:
+                    for country in countries:
+                        if supported and country not in supported:
+                            continue
+                        for kw in keywords:
+                            try:
+                                jobs = await scraper.search(
+                                    keywords=[kw],
+                                    location=location,
+                                    filters=filters,
+                                    limit=limit,
+                                    seen_urls=existing_urls,
+                                    country_code=country,
+                                )
+                            except Exception as exc:
+                                console.print(
+                                    f"  [red]{source}/{country}/{kw}:[/red] {exc}"
+                                )
+                                continue
 
-                fresh = [j for j in jobs if j.url not in existing_urls]
-                if fresh:
-                    with get_session() as session:
-                        for job in fresh:
-                            session.add(job)
-                            existing_urls.add(job.url)
-                    total += len(fresh)
-                    console.print(
-                        f"  [green]{source}/{country}[/green]: {len(fresh)} new jobs"
-                    )
-                else:
-                    console.print(f"  {source}/{country}: 0 new (all duplicates)")
+                            fresh = [j for j in jobs if j.url not in existing_urls]
+                            if fresh:
+                                with get_session() as session:
+                                    for job in fresh:
+                                        session.add(job)
+                                        existing_urls.add(job.url)
+                                total += len(fresh)
+                            safe_kw = kw.replace("[", "\\[")
+                            console.print(
+                                f"  {source}/{country} \\[{safe_kw}]: "
+                                f"[green]{len(fresh)}[/green] new, "
+                                f"{len(jobs) - len(fresh)} dupes"
+                            )
+            except Exception as exc:
+                console.print(f"[red]{source} init error:[/red] {exc}")
+                continue
         return total
 
     total = asyncio.run(_run())
     console.print(
         f"[bold green]Done.[/bold green] {total} new job(s) across "
-        f"{len(countries)} countries."
+        f"{len(keywords)} keywords × {len(countries)} countries."
     )
 
 
