@@ -82,7 +82,41 @@ class TestScraperFilters:
 
     def test_is_dataclass(self) -> None:
         field_names = {f.name for f in fields(ScraperFilters)}
-        assert field_names == {"remote_only", "contract_types", "min_salary", "excluded_keywords"}
+        assert field_names == {
+            "remote_only", "contract_types", "min_salary", "excluded_keywords",
+            "countries", "location",
+        }
+
+    def test_default_countries(self) -> None:
+        f = ScraperFilters()
+        assert f.countries == ["FR"]
+
+    def test_default_location(self) -> None:
+        f = ScraperFilters()
+        assert f.location == "remote"
+
+    def test_custom_countries(self) -> None:
+        f = ScraperFilters(countries=["US", "GB", "DE"])
+        assert f.countries == ["US", "GB", "DE"]
+
+    def test_countries_are_independent_instances(self) -> None:
+        f1 = ScraperFilters()
+        f2 = ScraperFilters()
+        f1.countries.append("US")
+        assert "US" not in f2.countries
+
+    def test_profile_yaml_has_search_config(self) -> None:
+        """profile.yaml must contain a search section with countries."""
+        import yaml
+        profile_path = Path(__file__).parent.parent / "src" / "config" / "profile.yaml"
+        with profile_path.open() as fh:
+            profile = yaml.safe_load(fh)
+        search = profile.get("search", {})
+        assert "countries" in search
+        assert "location" in search
+        assert "base_currency" in search
+        assert "FR" in search["countries"]
+        assert len(search["countries"]) >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +138,7 @@ class _ConcreteScraper(BaseScraper):
         location: str,
         filters: ScraperFilters | None,
         limit: int,
+        country_code: str = "FR",
     ) -> list[object]:
         return []
 
@@ -269,6 +304,7 @@ class _DupScraper(_ConcreteScraper):
         location: str,
         filters: ScraperFilters | None,
         limit: int,
+        country_code: str = "FR",
     ) -> list[object]:
         return list(self._raw_items)  # type: ignore[return-value]
 
@@ -403,7 +439,7 @@ class TestWTTJSearch:
     async def test_search_returns_list_of_jobs(self) -> None:
         fixture = _load_wttj_fixture("search_results.json")
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return fixture["jobs"]
 
         scraper = WTTJScraper()
@@ -416,7 +452,7 @@ class TestWTTJSearch:
     async def test_search_respects_limit(self) -> None:
         fixture = _load_wttj_fixture("search_results.json")
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return fixture["jobs"]
 
         scraper = WTTJScraper()
@@ -439,7 +475,7 @@ class TestWTTJSearch:
             "website_url": "https://www.welcometothejungle.com/fr/companies/co/jobs/x",
         }
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [raw_junior]
 
         scraper = WTTJScraper()
@@ -452,7 +488,7 @@ class TestWTTJSearch:
         fixture = _load_wttj_fixture("search_results.json")
         raw = fixture["jobs"][0]
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [raw, raw]  # same item twice
 
         scraper = WTTJScraper()
@@ -466,7 +502,7 @@ class TestWTTJSearch:
         raw = fixture["jobs"][0]
         url = raw["website_url"]
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [raw]
 
         scraper = WTTJScraper()
@@ -537,7 +573,7 @@ class TestIndeedSearch:
     async def test_search_returns_list_of_jobs(self) -> None:
         cards = _load_indeed_cards("search_results.html")
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return cards
 
         scraper = IndeedScraper()
@@ -560,7 +596,7 @@ class TestIndeedSearch:
         soup = BeautifulSoup(html, "lxml")
         cards = soup.select(".job_seen_beacon")
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return cards
 
         scraper = IndeedScraper()
@@ -573,7 +609,7 @@ class TestIndeedSearch:
         cards = _load_indeed_cards("search_results.html")
         card = cards[0]
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [card, card]
 
         scraper = IndeedScraper()
@@ -699,7 +735,7 @@ class TestLinkedInSearch:
             for i in range(3)
         ]
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return fake_raws
 
         scraper = LinkedInScraper()
@@ -719,7 +755,7 @@ class TestLinkedInSearch:
 
         fake_raws = [{"url": "https://www.linkedin.com/jobs/view/99/", "detail_soup": soup}]
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return fake_raws
 
         scraper = LinkedInScraper()
@@ -733,7 +769,7 @@ class TestLinkedInSearch:
         soup = BeautifulSoup(html, "lxml")
         raw = {"url": "https://www.linkedin.com/jobs/view/1111111111/", "detail_soup": soup}
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [raw, raw]
 
         scraper = LinkedInScraper()
@@ -747,7 +783,7 @@ class TestLinkedInSearch:
         soup = BeautifulSoup(html, "lxml")
         raw = {"url": "https://www.linkedin.com/jobs/view/1111111111/", "detail_soup": soup}
 
-        async def _mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def _mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return [raw]
 
         scraper = LinkedInScraper()
@@ -1148,7 +1184,7 @@ class TestIndeedApiSearch:
             (_INDEED_API_FIXTURES / "search_results.json").read_text()
         )
 
-        async def mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return search_fixture["data"][:1]  # one job
 
         detail_resp = _make_mock_response(_INDEED_API_FIXTURES / "job_detail.json")
@@ -1184,7 +1220,7 @@ class TestIndeedApiSearch:
         scraper._client = _MagicMock()
         scraper._client.get = _AsyncMock(return_value=detail_resp)
 
-        async def mock_fetch_raw(keywords, location, filters, limit):  # type: ignore[no-untyped-def]
+        async def mock_fetch_raw(keywords, location, filters, limit, **kwargs):  # type: ignore[no-untyped-def]
             return same_raw
 
         with patch.object(scraper, "_fetch_raw", side_effect=mock_fetch_raw):

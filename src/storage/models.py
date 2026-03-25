@@ -119,6 +119,10 @@ class Job(Base):
     contract_type = Column(String(50))             # CDI, Freelance, Contract…
     match_score = Column(Float, nullable=True)     # 0–100, set by Scorer
     match_reasoning = Column(Text, nullable=True)  # Claude explanation
+    country_code = Column(String(5), default="FR")           # ISO 3166-1 alpha-2
+    salary_currency = Column(String(3), nullable=True)       # Original currency code
+    salary_normalized_min = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
+    salary_normalized_max = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
     status: Column[str] = Column(SAEnum(JobStatus), default=JobStatus.NEW, nullable=False)
     scraped_at = Column(DateTime, default=datetime.utcnow)
 

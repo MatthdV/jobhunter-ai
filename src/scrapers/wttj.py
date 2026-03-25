@@ -65,7 +65,12 @@ class WTTJScraper(BaseScraper):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
+        if country_code != "FR":
+            logger.warning("WTTJ only supports FR, skipping country=%s", country_code)
+            return []
+
         assert self._browser is not None, "_setup() must be called first"
 
         collected: list[dict[str, Any]] = []
@@ -218,6 +223,8 @@ class WTTJScraper(BaseScraper):
                 salary_min=salary_min,
                 salary_max=salary_max,
                 contract_type=contract_type,
+                country_code="FR",
+                salary_currency="EUR",
             )
 
         except ParseError:
