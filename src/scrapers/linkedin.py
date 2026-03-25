@@ -23,6 +23,19 @@ _COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
 _SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}&f_WT=2"
 _LI_BASE = "https://www.linkedin.com"
 
+_GEO_IDS: dict[str, str] = {
+    "FR": "105015875",
+    "US": "103644278",
+    "GB": "101165590",
+    "DE": "101282230",
+    "NL": "102890719",
+    "CH": "106693272",
+    "ES": "105646813",
+    "BE": "100565514",
+    "CA": "101174742",
+    "SE": "105117694",
+}
+
 
 class LinkedInScraper(BaseScraper):
     """Scrape LinkedIn Jobs with stealth Playwright + cookie persistence.
@@ -139,6 +152,7 @@ class LinkedInScraper(BaseScraper):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
         assert self._context is not None, "_setup() must be called first"
 
@@ -153,7 +167,9 @@ class LinkedInScraper(BaseScraper):
             await self._authenticate(page)
 
             kw = quote_plus(" ".join(keywords))
-            search_url = _SEARCH_URL.format(kw=kw)
+            geo = _GEO_IDS.get(country_code, "")
+            geo_param = f"&geoId={geo}" if geo else ""
+            search_url = _SEARCH_URL.format(kw=kw) + geo_param
 
             await self._wait()
             await page.goto(search_url)

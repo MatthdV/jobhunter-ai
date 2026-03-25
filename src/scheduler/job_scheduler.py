@@ -7,9 +7,12 @@ from datetime import time as _time
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from src.config.settings import ConfigurationError, settings
 from src.storage.database import get_session
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus
+from src.utils.salary_normalizer import get_supported_countries
 
 logger = logging.getLogger(__name__)
 
@@ -123,37 +126,64 @@ class JobScheduler:
     # Slice 23 — _scan_phase
     # ------------------------------------------------------------------
 
-    async def _scan_phase(self, scrapers: list[Any] | None = None) -> int:
-        """Run all scrapers and persist new jobs. Returns count of new jobs."""
+    def _load_profile(self) -> dict[str, Any]:
+        """Load profile.yaml for search config."""
+        profile_path = Path(__file__).parent.parent / "config" / "profile.yaml"
+        with profile_path.open() as fh:
+            return yaml.safe_load(fh)
+
+    async def _scan_phase(
+        self,
+        scrapers: list[Any] | None = None,
+        countries: list[str] | None = None,
+    ) -> int:
+        """Run all scrapers across configured countries. Returns count of new jobs."""
         if not scrapers:
             return 0
+
+        if countries is None:
+            profile = self._load_profile()
+            countries = profile.get("search", {}).get("countries", ["FR"])
 
         with get_session() as session:
             existing_urls: set[str] = {
                 url for (url,) in session.query(Job.url).all()
             }
 
+        profile = self._load_profile()
+        keywords = profile.get("search_keywords", ["automation"])
+        location = profile.get("search", {}).get("location", "remote")
+
         new_count = 0
         for scraper in scrapers:
-            try:
-                async with scraper:
-                    jobs = await scraper.search(
-                        keywords=["automation"],
-                        location="remote",
-                        limit=50,
-                        seen_urls=existing_urls,
+            scraper_name = getattr(scraper, "source", "")
+            supported = get_supported_countries(scraper_name)
+            for country in countries:
+                if supported and country not in supported:
+                    logger.info(
+                        "Scraper %s doesn't support %s — skipping", scraper_name, country,
                     )
-            except Exception:
-                logger.exception("Scraper %r raised an error", scraper)
-                continue
+                    continue
+                try:
+                    async with scraper:
+                        jobs = await scraper.search(
+                            keywords=keywords,
+                            location=location,
+                            limit=50,
+                            seen_urls=existing_urls,
+                            country_code=country,
+                        )
+                except Exception:
+                    logger.exception("Scraper %r raised an error for %s", scraper, country)
+                    continue
 
-            fresh = [j for j in jobs if j.url not in existing_urls]
-            if fresh:
-                with get_session() as session:
-                    for job in fresh:
-                        session.add(job)
-                        existing_urls.add(job.url)
-                new_count += len(fresh)
+                fresh = [j for j in jobs if j.url not in existing_urls]
+                if fresh:
+                    with get_session() as session:
+                        for job in fresh:
+                            session.add(job)
+                            existing_urls.add(job.url)
+                    new_count += len(fresh)
 
         return new_count
 
