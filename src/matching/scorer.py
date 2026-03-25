@@ -23,6 +23,8 @@ _SYSTEM_MESSAGE = (
     "You are a job matching expert. Evaluate the fit between the candidate profile "
     "and the job offer across 5 dimensions: role alignment, tech stack overlap, "
     "salary match, remote/location, and company type. "
+    "Salary has been normalized to EUR with purchasing power parity (PPP). "
+    "Compare directly against the candidate's EUR salary target. "
     "Return ONLY valid JSON with this exact schema:\n"
     '{"score": <integer 0-100>, "reasoning": "<2-3 sentences>", '
     '"strengths": ["<strength>", ...], "concerns": ["<concern>", ...]}\n'
@@ -140,8 +142,15 @@ class Scorer:
             f"- Contract: {job.contract_type or 'Unknown'}\n"
             f"- Remote: {job.is_remote}\n"
             f"- Location: {job.location or 'Unknown'}\n"
-            f"- Salary: {job.salary_raw or 'Not specified'} ({job.salary_min}–{job.salary_max} EUR)\n"  # noqa: E501
-            f"- Description:\n{(job.description or '')[:2000]}"
+            f"- Country: {getattr(job, 'country_code', 'FR') or 'FR'}\n"
+            f"- Salary (original): {job.salary_raw or 'Not specified'}"
+            f" ({job.salary_min}–{job.salary_max} {getattr(job, 'salary_currency', None) or 'EUR'})\n"
+            + (
+                f"- Salary (PPP-normalized EUR): {job.salary_normalized_min}–{job.salary_normalized_max}\n"
+                if getattr(job, "salary_normalized_min", None) or getattr(job, "salary_normalized_max", None)
+                else ""
+            )
+            + f"- Description:\n{(job.description or '')[:2000]}"
         )
 
     def _parse_response(self, response_text: str) -> ScoreResult:

@@ -13,6 +13,7 @@ from src.scrapers.base import BaseScraper
 from src.scrapers.exceptions import ParseError
 from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
+from src.utils.salary_normalizer import get_country_config
 
 logger = logging.getLogger(__name__)
 
@@ -61,15 +62,23 @@ class IndeedScraper(BaseScraper):
     # _fetch_raw
     # ------------------------------------------------------------------
 
+    def _get_base_url(self, country_code: str) -> str:
+        """Return the Indeed base URL for a given country."""
+        config = get_country_config(country_code)
+        domain = config.indeed_domain if config else "fr"
+        return f"https://{domain}.indeed.com/jobs"
+
     async def _fetch_raw(
         self,
         keywords: list[str],
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
         assert self._browser is not None, "_setup() must be called first"
 
+        base_url = self._get_base_url(country_code)
         all_cards: list[Tag] = []
         page = await self._browser.new_page()
         query = quote_plus(" ".join(keywords))
@@ -77,7 +86,7 @@ class IndeedScraper(BaseScraper):
 
         try:
             while len(all_cards) < limit:
-                url = f"{_INDEED_BASE_URL}?q={query}&remotejob={_REMOTE_PARAM}&start={start}"
+                url = f"{base_url}?q={query}&remotejob={_REMOTE_PARAM}&start={start}"
                 await self._wait()
                 await page.goto(url)
                 await page.wait_for_load_state("networkidle")

@@ -24,19 +24,36 @@ def scan(
     ),
     limit: int = typer.Option(50, "--limit", "-l", help="Max offers per source."),
 ) -> None:
-    """Scrape job boards and store new offers in the database."""
+    """Scrape job boards across configured countries and store new offers."""
     import asyncio
+    import importlib
+
+    import yaml
 
     from src.config.settings import settings  # noqa: F401 — loads .env
     from src.scrapers.filters import ScraperFilters
     from src.storage.database import get_session
     from src.storage.models import Job
+    from src.utils.salary_normalizer import get_supported_countries
 
-    console.print(f"[bold]Scanning[/bold] {sources} (limit={limit} per source)…")
+    profile_path = Path(__file__).parent / "config" / "profile.yaml"
+    with profile_path.open() as fh:
+        profile = yaml.safe_load(fh)
+
+    search_cfg = profile.get("search", {})
+    countries = search_cfg.get("countries", ["FR"])
+    location = search_cfg.get("location", "remote")
+    keywords = profile.get("search_keywords", ["automation", "n8n", "RevOps"])
+
+    console.print(
+        f"[bold]Scanning[/bold] {sources} × {len(countries)} countries "
+        f"(limit={limit} per source per country)…"
+    )
 
     _scraper_map = {
         "wttj": "src.scrapers.wttj.WTTJScraper",
         "indeed": "src.scrapers.indeed.IndeedScraper",
+        "indeed_api": "src.scrapers.indeed_api.IndeedApiScraper",
         "linkedin": "src.scrapers.linkedin.LinkedInScraper",
     }
 
@@ -49,37 +66,52 @@ def scan(
             if source not in _scraper_map:
                 console.print(f"[yellow]Unknown source: {source}[/yellow]")
                 continue
+
             module_path, _, class_name = _scraper_map[source].rpartition(".")
-            import importlib
             mod = importlib.import_module(module_path)
             scraper_cls = getattr(mod, class_name)
+            supported = get_supported_countries(source)
             filters = ScraperFilters(remote_only=False)
-            try:
-                async with scraper_cls() as scraper:
-                    jobs = await scraper.search(
-                        keywords=["automation", "n8n", "RevOps"],
-                        location="France",
-                        filters=filters,
-                        limit=limit,
-                        seen_urls=existing_urls,
+
+            for country in countries:
+                if supported and country not in supported:
+                    console.print(
+                        f"  [yellow]{source} doesn't support {country}, skipping[/yellow]"
                     )
-            except Exception as exc:
-                console.print(f"[red]{source} scraper error:[/red] {exc}")
-                continue
-            fresh = [j for j in jobs if j.url not in existing_urls]
-            if fresh:
-                with get_session() as session:
-                    for job in fresh:
-                        session.add(job)
-                        existing_urls.add(job.url)
-                total += len(fresh)
-                console.print(f"  [green]{source}[/green]: {len(fresh)} new jobs")
-            else:
-                console.print(f"  {source}: 0 new jobs (all duplicates)")
+                    continue
+                try:
+                    async with scraper_cls() as scraper:
+                        jobs = await scraper.search(
+                            keywords=keywords,
+                            location=location,
+                            filters=filters,
+                            limit=limit,
+                            seen_urls=existing_urls,
+                            country_code=country,
+                        )
+                except Exception as exc:
+                    console.print(f"[red]{source}/{country} error:[/red] {exc}")
+                    continue
+
+                fresh = [j for j in jobs if j.url not in existing_urls]
+                if fresh:
+                    with get_session() as session:
+                        for job in fresh:
+                            session.add(job)
+                            existing_urls.add(job.url)
+                    total += len(fresh)
+                    console.print(
+                        f"  [green]{source}/{country}[/green]: {len(fresh)} new jobs"
+                    )
+                else:
+                    console.print(f"  {source}/{country}: 0 new (all duplicates)")
         return total
 
     total = asyncio.run(_run())
-    console.print(f"[bold green]Done.[/bold green] {total} new job(s) stored.")
+    console.print(
+        f"[bold green]Done.[/bold green] {total} new job(s) across "
+        f"{len(countries)} countries."
+    )
 
 
 @app.command()
