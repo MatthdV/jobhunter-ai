@@ -13,6 +13,7 @@ from src.scrapers.base import BaseScraper
 from src.scrapers.exceptions import ParseError, RateLimitError
 from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
+from src.utils.salary_normalizer import get_country_config
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,12 @@ class IndeedApiScraper(BaseScraper):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
         assert self._client is not None, "_setup() must be called first"
+
+        config = get_country_config(country_code)
+        api_country = config.indeed_country_code if config else country_code
 
         query = " ".join(keywords)
         num_pages = min(10, math.ceil(limit / 10))
@@ -89,7 +94,7 @@ class IndeedApiScraper(BaseScraper):
             params={
                 "query": query,
                 "location": location,
-                "country": _COUNTRY,
+                "country": api_country,
                 "num_pages": num_pages,
                 "date_posted": "all",
             },

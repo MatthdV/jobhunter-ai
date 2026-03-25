@@ -25,3 +25,5 @@ class ScraperFilters:
     excluded_keywords: list[str] = field(
         default_factory=lambda: ["junior", "stage", "internship", "stagiaire", "alternance"]
     )
+    countries: list[str] = field(default_factory=lambda: ["FR"])
+    location: str = "remote"

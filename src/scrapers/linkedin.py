@@ -23,6 +23,19 @@ _COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
 _SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}&f_WT=2"
 _LI_BASE = "https://www.linkedin.com"
 
+_GEO_IDS: dict[str, str] = {
+    "FR": "105015875",
+    "US": "103644278",
+    "GB": "101165590",
+    "DE": "101282230",
+    "NL": "102890719",
+    "CH": "106693272",
+    "ES": "105646813",
+    "BE": "100565514",
+    "CA": "101174742",
+    "SE": "105117694",
+}
+
 
 class LinkedInScraper(BaseScraper):
     """Scrape LinkedIn Jobs with stealth Playwright + cookie persistence.
@@ -50,7 +63,6 @@ class LinkedInScraper(BaseScraper):
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._playwright_ctx: Any = None
-        self._stealth_fn: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -60,16 +72,15 @@ class LinkedInScraper(BaseScraper):
         _COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         self._playwright_ctx = await async_playwright().start()
-
-        try:
-            from playwright_stealth import stealth_async
-            self._stealth_fn = stealth_async
-        except ImportError:
-            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
-            self._stealth_fn = None
-
         self._browser = await self._playwright_ctx.chromium.launch(headless=self.headless)
         self._context = await self._browser.new_context()
+
+        # playwright-stealth v2: apply to context — all pages inherit evasions
+        try:
+            from playwright_stealth import Stealth
+            await Stealth().apply_stealth_async(self._context)
+        except ImportError:
+            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
 
         if _COOKIES_PATH.exists():
             cookies = json.loads(_COOKIES_PATH.read_text())
@@ -90,21 +101,24 @@ class LinkedInScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     async def _is_authenticated(self, page: Page) -> bool:
-        nav = await page.query_selector("nav.global-nav")
+        # LinkedIn changed nav.global-nav to #global-nav (no longer <nav> tag)
+        nav = await page.query_selector("#global-nav, .global-nav")
         return nav is not None
 
     def _has_credentials(self) -> bool:
-        return bool(os.getenv("LINKEDIN_EMAIL")) and bool(os.getenv("LINKEDIN_PASSWORD"))
+        from src.config.settings import settings
+        return bool(settings.linkedin_email) and bool(settings.linkedin_password)
 
     async def _run_login(self, page: Page) -> None:
-        email = os.getenv("LINKEDIN_EMAIL", "")
-        password = os.getenv("LINKEDIN_PASSWORD", "")
+        from src.config.settings import settings
+        email = settings.linkedin_email
+        password = settings.linkedin_password
 
         await page.goto("https://www.linkedin.com/login")
         await page.fill("#username", email)
         await page.fill("#password", password)
         await page.click('button[type="submit"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
 
         # Detect 2FA / CAPTCHA challenge pages
         url = page.url
@@ -118,6 +132,8 @@ class LinkedInScraper(BaseScraper):
 
     async def _authenticate(self, page: Page) -> None:
         """Ensure the page is authenticated. Raises AuthenticationError if not possible."""
+        import asyncio as _aio
+        await _aio.sleep(2)  # Let dynamic content render after domcontentloaded
         if await self._is_authenticated(page):
             return
 
@@ -139,13 +155,11 @@ class LinkedInScraper(BaseScraper):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
         assert self._context is not None, "_setup() must be called first"
 
         page = await self._context.new_page()
-        if self._stealth_fn:
-            await self._stealth_fn(page)
-
         raw_items: list[dict[str, Any]] = []
 
         try:
@@ -153,11 +167,13 @@ class LinkedInScraper(BaseScraper):
             await self._authenticate(page)
 
             kw = quote_plus(" ".join(keywords))
-            search_url = _SEARCH_URL.format(kw=kw)
+            geo = _GEO_IDS.get(country_code, "")
+            geo_param = f"&geoId={geo}" if geo else ""
+            search_url = _SEARCH_URL.format(kw=kw) + geo_param
 
             await self._wait()
             await page.goto(search_url)
-            await page.wait_for_load_state("networkidle")
+            await page.wait_for_load_state("domcontentloaded")
 
             html = await page.content()
             soup = BeautifulSoup(html, "lxml")
@@ -174,9 +190,6 @@ class LinkedInScraper(BaseScraper):
                 # Fetch detail page for full description
                 await self._wait()
                 detail_page = await self._context.new_page()
-                if self._stealth_fn:
-                    await self._stealth_fn(detail_page)
-
                 try:
                     await detail_page.goto(job_url)
                     await detail_page.wait_for_load_state("networkidle")
