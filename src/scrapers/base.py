@@ -9,6 +9,7 @@ from typing import Any
 
 from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
+from src.utils.salary_normalizer import get_country_config, normalize_salary
 
 # French standard: 365 - 104 weekends - 11 bank holidays - ~30 leave days
 WORKING_DAYS_PER_YEAR: int = 220
@@ -53,6 +54,7 @@ class BaseScraper(ABC):
         filters: ScraperFilters | None = None,
         limit: int = 50,
         seen_urls: set[str] | None = None,
+        country_code: str = "FR",
     ) -> list[Job]:
         """Search for job offers matching *keywords*.
 
@@ -65,18 +67,27 @@ class BaseScraper(ABC):
             limit: Maximum number of Job instances to return.
             seen_urls: URLs already persisted to DB, provided by the caller
                 (JobScheduler) for cross-session deduplication.
+            country_code: ISO 3166-1 alpha-2 country code (default: "FR").
         """
         effective_filters = filters or ScraperFilters()
         db_seen: set[str] = seen_urls or set()
         batch_seen: set[str] = set()
         results: list[Job] = []
 
-        raw_items = await self._fetch_raw(keywords, location, effective_filters, limit)
+        raw_items = await self._fetch_raw(
+            keywords, location, effective_filters, limit, country_code=country_code,
+        )
+
+        config = get_country_config(country_code)
 
         for raw in raw_items:
             if len(results) >= limit:
                 break
             job = await self._parse_raw(raw)
+            # Set country metadata
+            job.country_code = country_code  # type: ignore[assignment]
+            if config:
+                job.salary_currency = config.currency  # type: ignore[assignment]
             if job.url in db_seen or job.url in batch_seen:
                 continue
             batch_seen.add(job.url)  # type: ignore[arg-type]
@@ -97,6 +108,7 @@ class BaseScraper(ABC):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
         """Fetch raw items from the job board.
 
@@ -144,6 +156,13 @@ class BaseScraper(ABC):
         # Salary parsing — only when not already set (WTTJ provides structured values)
         if job.salary_min is None and job.salary_max is None and job.salary_raw:
             job.salary_min, job.salary_max = self._parse_salary(job.salary_raw)
+
+        # Salary normalization (PPP-adjusted EUR)
+        country = job.country_code or "FR"
+        if job.salary_min is not None:
+            job.salary_normalized_min = int(normalize_salary(job.salary_min, country))
+        if job.salary_max is not None:
+            job.salary_normalized_max = int(normalize_salary(job.salary_max, country))
 
         # Excluded keyword filter (case-insensitive, title + description)
         search_text = f"{job.title} {job.description or ''}".lower()

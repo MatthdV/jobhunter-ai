@@ -1,91 +1,87 @@
-# CLAUDE.md
+# JobHunter AI — Project Guidelines
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Overview
 
-## Project Overview
-
-JobHunter AI is a semi-autonomous job search automation system built for Matthieu de Villele (Automation & AI Engineer / RevOps Consultant). The system automates job discovery, application generation, recruiter communication, and interview preparation — with mandatory human validation before submitting applications.
-
-**Target KPIs**: 50 offers analyzed/day → 5-10 applications/day → 15%+ response rate → 2-3 interviews/week.
-
-## 5-Phase Architecture
-
-```
-Phase 1 — Préparation  : Profile analysis, LinkedIn optimization, adaptive CV generation
-Phase 2 — Recherche    : Scraping (LinkedIn, Indeed, WTTJ, AngelList), IA matching (score > 80%)
-Phase 3 — Candidature  : Personalized CV + cover letter per offer → human validation gate → submission
-Phase 4 — Réponse      : Auto-responses, salary negotiation scripts, scam detection
-Phase 5 — RDV          : Calendly integration, company briefings, Q&A prep, Telegram/email recap
-```
-
-Semi-autonomous model: the user only validates and passes interviews. Everything else is automated.
-
-## Tech Stack
-
-| Component       | Technology                              |
-|-----------------|-----------------------------------------|
-| Scraping        | Playwright + Python                     |
-| IA Matching     | Claude API + Embeddings                 |
-| CV Generation   | Jinja2 + WeasyPrint (HTML → PDF)        |
-| Email           | Gmail API                               |
-| Scheduling      | Calendly API                            |
-| Notifications   | Telegram Bot + Email                    |
-| Storage         | SQLite (dev) / PostgreSQL (prod)        |
-| Automation      | n8n for workflow orchestration          |
-
-## Commands
-
-```bash
-# Install dependencies (requires Python 3.11+)
-pip install -e ".[dev]"
-
-# Install Playwright browsers (first time only)
-playwright install chromium
-
-# Initialise the database
-python -m src.main init-db
-
-# Run the CLI
-python -m src.main --help
-python -m src.main scan --source linkedin --limit 20
-python -m src.main match --min-score 80
-python -m src.main apply --dry-run
-
-# Tests
-pytest
-pytest tests/test_scrapers.py -v   # single file
-pytest -k "test_score"             # single test
-
-# Type checking & lint
-mypy src/
-ruff check src/ tests/
-```
+Semi-autonomous job search pipeline: scrape → match → apply → respond.
+Multi-country search with salary normalization (PPP-adjusted EUR).
 
 ## Architecture
 
 ```
 src/
-├── main.py               # Typer CLI — entry point
-├── config/
-│   ├── settings.py       # Pydantic Settings (loads .env) — REAL
-│   └── profile.yaml      # Candidate profile, target roles, companies — REAL
-├── storage/
-│   ├── models.py         # SQLAlchemy ORM: Job, Application, Company, Recruiter — REAL
-│   └── database.py       # Engine, session factory, init_db(), health_check() — REAL
-├── scrapers/             # Phase 2 — STUBS (BaseScraper + LinkedIn/Indeed/WTTJ)
-├── matching/             # Phase 2 — STUBS (Scorer via Claude, EmbeddingMatcher)
-├── generators/           # Phase 3 — STUBS (CVGenerator, CoverLetterGenerator)
-├── communications/       # Phase 4 — STUBS (EmailHandler, TelegramBot, RecruiterResponder)
-├── scheduler/            # Phase 4 — STUB (JobScheduler orchestrates all phases)
-└── analysis/             # Profile analysis (migrated from analysis/)
+├── config/          # profile.yaml (candidate profile + search config), settings.py
+├── scrapers/        # BaseScraper + WTTJ, Indeed (API + Playwright), LinkedIn
+├── utils/           # salary_normalizer.py (PPP conversion)
+├── storage/         # SQLAlchemy models (Job, Company, Application, etc.) + Alembic
+├── matching/        # LLM-based scorer (profile.yaml vs job)
+├── generators/      # CV (Jinja2 + WeasyPrint) + cover letter (LLM)
+├── communications/  # Telegram bot, Gmail handler, recruiter responder
+├── scheduler/       # Pipeline orchestrator (scan → match → apply → respond)
+├── llm/             # Multi-provider LLM clients (Anthropic, OpenAI, Mistral, etc.)
+├── importers/       # LinkedIn export ZIP → profile.yaml
+├── analysis/        # Profile analyzer
+└── main.py          # Typer CLI
 ```
 
-## Key Design Decisions
+## Commands
 
-- **Human-in-the-loop gate**: `TelegramBot.request_approval()` blocks before any application is submitted — never bypass this gate
-- **Dry-run default**: `settings.dry_run = True` by default; must explicitly pass `--live` to submit
-- **Daily cap**: `settings.max_applications_per_day` hard-limits submissions
-- **Match threshold**: only jobs with `match_score >= settings.min_match_score` proceed to the apply phase
-- **Profile source of truth**: `src/config/profile.yaml` drives scoring prompts, CV generation, and search keywords — edit here, not in code
-- **Personalization over volume**: each CV and cover letter is tailored per offer via Claude; never blasted generically
-- **ANTHROPIC_API_KEY**: optional at import time, enforced at runtime by `Scorer.__init__` / `CoverLetterGenerator.__init__` via `ConfigurationError`
+```bash
+# Dependencies
+.venv/bin/pip install -e ".[dev]"
+
+# Tests (ALWAYS use .venv/bin/python — system Python is 3.9, incompatible)
+.venv/bin/python -m pytest tests/ --no-header -q
+.venv/bin/python -m pytest tests/test_scrapers.py -x  # specific file
+
+# CLI
+.venv/bin/python -m src.main scan --source wttj --limit 10
+.venv/bin/python -m src.main match --min-score 80
+.venv/bin/python -m src.main apply --dry-run
+
+# Migrations
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m alembic revision --autogenerate -m "description"
+```
+
+## Multi-Country Search
+
+Configured in `src/config/profile.yaml` under `search:`:
+
+```yaml
+search:
+  countries: ["FR", "US", "GB", "DE", "NL", "ES", "CH", "BE", "CA", "SE"]
+  location: "remote"
+  base_currency: "EUR"
+```
+
+### Scraper Support
+
+| Scraper      | Countries supported |
+|-------------|-------------------|
+| WTTJ        | FR only           |
+| Indeed API   | All 10            |
+| Indeed (PW)  | All 10            |
+| LinkedIn     | All 10 (geoId)    |
+
+### Salary Normalization
+
+`src/utils/salary_normalizer.py` converts salaries to EUR and applies purchasing power parity (PPP) coefficients. France is baseline (1.0). Job model stores both original (`salary_min`/`salary_max`) and normalized (`salary_normalized_min`/`salary_normalized_max`).
+
+## Key Patterns
+
+- **Scrapers**: All extend `BaseScraper` with `_fetch_raw()` + `_parse_raw()`. Country passed via `country_code` param (default "FR").
+- **Rate limiting**: Token bucket per scraper with MIN_DELAY/MAX_DELAY/MAX_RPH.
+- **Deduplication**: By URL, both in-batch and cross-session (seen_urls set).
+- **LLM scoring**: Claude scores jobs 0-100 against profile.yaml. PPP-normalized salaries in prompt.
+- **Database**: SQLAlchemy 2.0 + Alembic migrations. SQLite default, PostgreSQL for multi-tenant.
+
+## Testing
+
+- TDD vertical slices: test → impl → test → impl
+- 250+ tests, pytest + pytest-asyncio
+- Mock Playwright with fixture files in `tests/fixtures/`
+- DB tests use `sqlite:///:memory:` with autouse fixture
+
+## Multi-Tenant Backend (API)
+
+FastAPI backend in `api/` for multi-user SaaS mode. Next.js frontend in `web/`.

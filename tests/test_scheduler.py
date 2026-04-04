@@ -121,7 +121,7 @@ class TestScanPhase:
         mock_scraper.search = AsyncMock(return_value=[scraped_job])
 
         scheduler = make_scheduler()
-        count = await scheduler._scan_phase(scrapers=[mock_scraper])
+        count = await scheduler._scan_phase(scrapers=[mock_scraper], countries=["FR"])
 
         assert count == 1
         with get_session() as session:
@@ -140,7 +140,7 @@ class TestScanPhase:
         mock_scraper.search = AsyncMock(return_value=[duplicate])
 
         scheduler = make_scheduler()
-        count = await scheduler._scan_phase(scrapers=[mock_scraper])
+        count = await scheduler._scan_phase(scrapers=[mock_scraper], countries=["FR"])
 
         assert count == 0
         with get_session() as session:
