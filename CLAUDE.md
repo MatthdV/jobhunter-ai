@@ -1,91 +1,33 @@
-# CLAUDE.md
+# Jobhunter AI — Context
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> ARTEFACT GÉNÉRÉ — ne pas éditer manuellement.
+> Source : Matthieu_local/projets/jobhunter/historique.md | Régénéré le 2026-05-07 via /archive
 
-## Project Overview
+## Infos critiques
+- Repo : ~/Documents/Claude/Projects/jobhunter-ai/
+- Stack : Python 3.14, FastAPI, SQLAlchemy, Playwright, Typer CLI, Anthropic/OpenRouter/Mistral APIs
+- DB : SQLite local (`jobhunter.db`) — peut se corrompre si kill mid-write → `sqlite3 db.db "PRAGMA integrity_check"`
+- APIs : Anthropic, OpenRouter, Gmail OAuth2, JSearch RapidAPI (expirée → 403), Telegram Bot
+- Web UI : `uvicorn src.api.app:app --reload` (port 8000) — livré en session 2026-05-07
+- Deploy : local (CLI + dashboard web)
 
-JobHunter AI is a semi-autonomous job search automation system built for Matthieu de Villele (Automation & AI Engineer / RevOps Consultant). The system automates job discovery, application generation, recruiter communication, and interview preparation — with mandatory human validation before submitting applications.
+## État actuel
+- Dernière tâche : Dashboard web FastAPI/HTMX/Tailwind livré. 81 tests passants. Commit `4f58d68` sur `claude/musing-nobel-245332`
+- Prochaine étape : Merger `claude/musing-nobel-245332` → `main` puis vérifier dashboard live avec `uvicorn src.api.app:app --reload`
 
-**Target KPIs**: 50 offers analyzed/day → 5-10 applications/day → 15%+ response rate → 2-3 interviews/week.
+## Décisions clés (3 plus récentes)
+- Dashboard : FastAPI + Jinja2 + HTMX no-build — rejeté : React SPA (transpilation inutile)
+- Background tasks : `background_tasks.add_task(_run_scan)` direct — rejeté : `asyncio.ensure_future` (crash sans event loop)
+- `TemplateResponse(request, name, ctx)` Starlette v0.27+ — rejeté : ancienne signature → `unhashable dict` en cache Jinja2
 
-## 5-Phase Architecture
+## Watch out
+- `tracker.start(name)` doit être appelé dans le route handler *avant* `add_task` — sinon race window 409
+- `_run_match` : charger IDs en session 1 (fermée), rouvrir session 2 pour scoring async — évite session sync tenue sur await
+- `_run_apply` : extraire snapshot job en dict avant fermeture session — évite `DetachedInstanceError`
+- JSearch subscription expirée (`69cebe676d…`) → pipeline fonctionne en stub (titre/company, pas JD)
+- Activer venv : `source .venv/bin/activate` (Python 3.14)
 
-```
-Phase 1 — Préparation  : Profile analysis, LinkedIn optimization, adaptive CV generation
-Phase 2 — Recherche    : Scraping (LinkedIn, Indeed, WTTJ, AngelList), IA matching (score > 80%)
-Phase 3 — Candidature  : Personalized CV + cover letter per offer → human validation gate → submission
-Phase 4 — Réponse      : Auto-responses, salary negotiation scripts, scam detection
-Phase 5 — RDV          : Calendly integration, company briefings, Q&A prep, Telegram/email recap
-```
-
-Semi-autonomous model: the user only validates and passes interviews. Everything else is automated.
-
-## Tech Stack
-
-| Component       | Technology                              |
-|-----------------|-----------------------------------------|
-| Scraping        | Playwright + Python                     |
-| IA Matching     | Claude API + Embeddings                 |
-| CV Generation   | Jinja2 + WeasyPrint (HTML → PDF)        |
-| Email           | Gmail API                               |
-| Scheduling      | Calendly API                            |
-| Notifications   | Telegram Bot + Email                    |
-| Storage         | SQLite (dev) / PostgreSQL (prod)        |
-| Automation      | n8n for workflow orchestration          |
-
-## Commands
-
-```bash
-# Install dependencies (requires Python 3.11+)
-pip install -e ".[dev]"
-
-# Install Playwright browsers (first time only)
-playwright install chromium
-
-# Initialise the database
-python -m src.main init-db
-
-# Run the CLI
-python -m src.main --help
-python -m src.main scan --source linkedin --limit 20
-python -m src.main match --min-score 80
-python -m src.main apply --dry-run
-
-# Tests
-pytest
-pytest tests/test_scrapers.py -v   # single file
-pytest -k "test_score"             # single test
-
-# Type checking & lint
-mypy src/
-ruff check src/ tests/
-```
-
-## Architecture
-
-```
-src/
-├── main.py               # Typer CLI — entry point
-├── config/
-│   ├── settings.py       # Pydantic Settings (loads .env) — REAL
-│   └── profile.yaml      # Candidate profile, target roles, companies — REAL
-├── storage/
-│   ├── models.py         # SQLAlchemy ORM: Job, Application, Company, Recruiter — REAL
-│   └── database.py       # Engine, session factory, init_db(), health_check() — REAL
-├── scrapers/             # Phase 2 — STUBS (BaseScraper + LinkedIn/Indeed/WTTJ)
-├── matching/             # Phase 2 — STUBS (Scorer via Claude, EmbeddingMatcher)
-├── generators/           # Phase 3 — STUBS (CVGenerator, CoverLetterGenerator)
-├── communications/       # Phase 4 — STUBS (EmailHandler, TelegramBot, RecruiterResponder)
-├── scheduler/            # Phase 4 — STUB (JobScheduler orchestrates all phases)
-└── analysis/             # Profile analysis (migrated from analysis/)
-```
-
-## Key Design Decisions
-
-- **Human-in-the-loop gate**: `TelegramBot.request_approval()` blocks before any application is submitted — never bypass this gate
-- **Dry-run default**: `settings.dry_run = True` by default; must explicitly pass `--live` to submit
-- **Daily cap**: `settings.max_applications_per_day` hard-limits submissions
-- **Match threshold**: only jobs with `match_score >= settings.min_match_score` proceed to the apply phase
-- **Profile source of truth**: `src/config/profile.yaml` drives scoring prompts, CV generation, and search keywords — edit here, not in code
-- **Personalization over volume**: each CV and cover letter is tailored per offer via Claude; never blasted generically
-- **ANTHROPIC_API_KEY**: optional at import time, enforced at runtime by `Scorer.__init__` / `CoverLetterGenerator.__init__` via `ConfigurationError`
+## Session carry-forward
+- Aniket Sen (ex-manager Groupon) a demandé à voir le repo — opportunité réseau, réponse LinkedIn à rédiger
+- 10+ jobs cluster 74-79 — avec JSearch actif beaucoup passeront ≥80
+- Branche `claude/musing-nobel-245332` pas encore mergée sur main

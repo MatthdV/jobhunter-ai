@@ -23,6 +23,19 @@ _COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
 _SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}&f_WT=2"
 _LI_BASE = "https://www.linkedin.com"
 
+_GEO_IDS: dict[str, str] = {
+    "FR": "105015875",
+    "US": "103644278",
+    "GB": "101165590",
+    "DE": "101282230",
+    "NL": "102890719",
+    "CH": "106693272",
+    "ES": "105646813",
+    "BE": "100565514",
+    "CA": "101174742",
+    "SE": "105117694",
+}
+
 
 class LinkedInScraper(BaseScraper):
     """Scrape LinkedIn Jobs with stealth Playwright + cookie persistence.
@@ -50,7 +63,6 @@ class LinkedInScraper(BaseScraper):
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._playwright_ctx: Any = None
-        self._stealth_fn: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -60,16 +72,15 @@ class LinkedInScraper(BaseScraper):
         _COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         self._playwright_ctx = await async_playwright().start()
-
-        try:
-            from playwright_stealth import stealth_async
-            self._stealth_fn = stealth_async
-        except ImportError:
-            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
-            self._stealth_fn = None
-
         self._browser = await self._playwright_ctx.chromium.launch(headless=self.headless)
         self._context = await self._browser.new_context()
+
+        # playwright-stealth v2: apply to context — all pages inherit evasions
+        try:
+            from playwright_stealth import Stealth
+            await Stealth().apply_stealth_async(self._context)
+        except ImportError:
+            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
 
         if _COOKIES_PATH.exists():
             cookies = json.loads(_COOKIES_PATH.read_text())
@@ -90,21 +101,24 @@ class LinkedInScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     async def _is_authenticated(self, page: Page) -> bool:
-        nav = await page.query_selector("nav.global-nav")
+        # LinkedIn changed nav.global-nav to #global-nav (no longer <nav> tag)
+        nav = await page.query_selector("#global-nav, .global-nav")
         return nav is not None
 
     def _has_credentials(self) -> bool:
-        return bool(os.getenv("LINKEDIN_EMAIL")) and bool(os.getenv("LINKEDIN_PASSWORD"))
+        from src.config.settings import settings
+        return bool(settings.linkedin_email) and bool(settings.linkedin_password)
 
     async def _run_login(self, page: Page) -> None:
-        email = os.getenv("LINKEDIN_EMAIL", "")
-        password = os.getenv("LINKEDIN_PASSWORD", "")
+        from src.config.settings import settings
+        email = settings.linkedin_email
+        password = settings.linkedin_password
 
         await page.goto("https://www.linkedin.com/login")
         await page.fill("#username", email)
         await page.fill("#password", password)
         await page.click('button[type="submit"]')
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
 
         # Detect 2FA / CAPTCHA challenge pages
         url = page.url
@@ -118,6 +132,8 @@ class LinkedInScraper(BaseScraper):
 
     async def _authenticate(self, page: Page) -> None:
         """Ensure the page is authenticated. Raises AuthenticationError if not possible."""
+        import asyncio as _aio
+        await _aio.sleep(2)  # Let dynamic content render after domcontentloaded
         if await self._is_authenticated(page):
             return
 
@@ -139,57 +155,58 @@ class LinkedInScraper(BaseScraper):
         location: str,
         filters: ScraperFilters,
         limit: int,
+        country_code: str = "FR",
     ) -> list[Any]:
+        """Fetch jobs from LinkedIn two-pane search: click each card, read detail."""
+        import asyncio as _aio
+
         assert self._context is not None, "_setup() must be called first"
 
         page = await self._context.new_page()
-        if self._stealth_fn:
-            await self._stealth_fn(page)
-
         raw_items: list[dict[str, Any]] = []
 
         try:
-            await page.goto(_LI_BASE)
+            await page.goto(_LI_BASE, wait_until="domcontentloaded")
             await self._authenticate(page)
 
             kw = quote_plus(" ".join(keywords))
-            search_url = _SEARCH_URL.format(kw=kw)
+            geo = _GEO_IDS.get(country_code, "")
+            geo_param = f"&geoId={geo}" if geo else ""
+            search_url = _SEARCH_URL.format(kw=kw) + geo_param
 
             await self._wait()
-            await page.goto(search_url)
-            await page.wait_for_load_state("networkidle")
+            await page.goto(search_url, wait_until="domcontentloaded")
 
-            html = await page.content()
-            soup = BeautifulSoup(html, "lxml")
-            cards = soup.select(".jobs-search-results__list-item .base-card")
+            # Wait for job cards to render (SPA content loads after domcontentloaded)
+            try:
+                await page.wait_for_selector(
+                    ".job-card-container", timeout=15000,
+                )
+            except Exception:
+                logger.warning("No job cards found for search: %s", search_url)
+                return []
+
+            cards = await page.query_selector_all(".job-card-container")
 
             for card in cards:
-                link_el = card.select_one("a.base-card__full-link")
-                if not link_el:
-                    continue
-                job_url: str = link_el.get("href", "") or ""  # type: ignore[assignment]
-                if not job_url:
-                    continue
-
-                # Fetch detail page for full description
-                await self._wait()
-                detail_page = await self._context.new_page()
-                if self._stealth_fn:
-                    await self._stealth_fn(detail_page)
-
-                try:
-                    await detail_page.goto(job_url)
-                    await detail_page.wait_for_load_state("networkidle")
-                    detail_html = await detail_page.content()
-                    detail_soup = BeautifulSoup(detail_html, "lxml")
-                    raw_items.append({"url": job_url, "detail_soup": detail_soup})
-                except Exception as exc:
-                    logger.warning("Failed to load LinkedIn job detail %s: %s", job_url, exc)
-                finally:
-                    await detail_page.close()
-
                 if len(raw_items) >= limit:
                     break
+
+                job_id = await card.get_attribute("data-job-id")
+                if not job_id:
+                    continue
+
+                # Click card to load detail in the side pane
+                try:
+                    await card.click()
+                    await _aio.sleep(2)
+                except Exception:
+                    continue
+
+                detail_html = await page.content()
+                detail_soup = BeautifulSoup(detail_html, "lxml")
+                job_url = f"{_LI_BASE}/jobs/view/{job_id}/"
+                raw_items.append({"url": job_url, "detail_soup": detail_soup})
 
         except AuthenticationError:
             raise
@@ -205,7 +222,7 @@ class LinkedInScraper(BaseScraper):
     # ------------------------------------------------------------------
 
     async def _parse_raw(self, raw: Any) -> Job:
-        """Parse a LinkedIn detail page dict into a Job instance.
+        """Parse a LinkedIn two-pane detail dict into a Job instance.
 
         Expects raw = {"url": str, "detail_soup": BeautifulSoup}.
         """
@@ -216,37 +233,62 @@ class LinkedInScraper(BaseScraper):
             url: str = raw["url"]
             soup: BeautifulSoup = raw["detail_soup"]
 
-            title_el = soup.select_one(".jobs-unified-top-card h1")
+            # Title — try new two-pane layout, then legacy selector
+            title_el = soup.select_one(
+                ".job-details-jobs-unified-top-card__job-title, "
+                ".jobs-unified-top-card__job-title, "
+                ".jobs-unified-top-card h1"
+            )
             title: str = title_el.get_text(strip=True) if title_el else ""
 
             if not title:
-                raise ParseError(f"Missing title in LinkedIn detail page for {url}")
+                raise ParseError(f"Missing title in LinkedIn detail pane for {url}")
 
-            # First bullet = contract type (e.g. "CDI"), second = location (e.g. "Paris · Remote")
-            contract_el = soup.select_one(".jobs-unified-top-card__bullet")
-            contract_type: str | None = (
-                contract_el.get_text(strip=True) if contract_el else None
+            # Location — new layout: metadata container; legacy: second bullet
+            meta_el = soup.select_one(
+                ".job-details-jobs-unified-top-card__primary-description-container, "
+                ".jobs-unified-top-card__subtitle-primary-grouping"
             )
+            location_str: str | None = None
+            if meta_el:
+                meta_text = meta_el.get_text(separator="·", strip=True)
+                parts = [p.strip() for p in meta_text.split("·")]
+                if parts:
+                    location_str = parts[0]
+            else:
+                # Legacy: second bullet
+                location_el = soup.select_one(
+                    ".jobs-unified-top-card__bullet ~ .jobs-unified-top-card__bullet"
+                )
+                location_str = location_el.get_text(strip=True) if location_el else None
 
-            location_el = soup.select_one(
-                ".jobs-unified-top-card__bullet ~ .jobs-unified-top-card__bullet"
+            # Description — try multiple selectors (new + legacy)
+            description_el = soup.select_one(
+                ".jobs-description__content, "
+                ".jobs-description-content__text, "
+                ".jobs-box__html-content"
             )
-            location_str: str | None = (
-                location_el.get_text(strip=True) if location_el else None
-            )
-
-            salary_el = soup.select_one(".jobs-unified-top-card__job-insight span")
-            salary_raw_str: str | None = None
-            if salary_el:
-                text = salary_el.get_text(strip=True)
-                if "€" in text or "k" in text.lower():
-                    salary_raw_str = text
-
-            description_el = soup.select_one(".jobs-description-content__text")
             description: str | None = (
                 description_el.get_text(separator=" ", strip=True)
                 if description_el
                 else None
+            )
+
+            # Salary — new layout: job insight spans; legacy: top-card insight
+            salary_raw_str: str | None = None
+            for insight in soup.select(
+                ".job-details-jobs-unified-top-card__job-insight span, "
+                ".jobs-unified-top-card__job-insight span"
+            ):
+                text = insight.get_text(strip=True)
+                if "€" in text or "$" in text or "£" in text or ("k" in text.lower() and any(c.isdigit() for c in text)):
+                    salary_raw_str = text
+                    break
+
+            # Contract type — legacy: first bullet; new layout: not reliably available
+            contract_el = soup.select_one(".jobs-unified-top-card__bullet")
+            contract_type: str | None = (
+                contract_el.get_text(strip=True) if contract_el else None
             )
 
             return Job(

@@ -21,6 +21,16 @@ class Settings(BaseSettings):
         description="Model name — leave empty to use provider default",
     )
 
+    # --- LLM Scoring (separate from generation) ---
+    llm_scoring_provider: str = Field(
+        "",
+        description="LLM provider for scoring — defaults to llm_provider if empty",
+    )
+    llm_scoring_model: str = Field(
+        "",
+        description="Model for scoring — defaults to llm_model if empty",
+    )
+
     # --- Anthropic ---
     # Empty by default so the module can be imported without a .env file.
     # Scorer and CoverLetterGenerator will raise ConfigurationError at init

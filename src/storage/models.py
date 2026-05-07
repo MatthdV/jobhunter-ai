@@ -90,6 +90,13 @@ class Company(Base):
     linkedin_url = Column(String(500))
     notes = Column(Text)
     is_target = Column(Boolean, default=False)     # From profile.yaml target list
+    funding_stage = Column(String(50), nullable=True)
+    tech_stack_signals = Column(Text, nullable=True)    # JSON array
+    culture_signals = Column(Text, nullable=True)       # JSON array
+    glassdoor_rating = Column(Float, nullable=True)
+    growth_signals = Column(Text, nullable=True)        # JSON array
+    red_flags = Column(Text, nullable=True)             # JSON array
+    researched_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
@@ -119,6 +126,10 @@ class Job(Base):
     contract_type = Column(String(50))             # CDI, Freelance, Contract…
     match_score = Column(Float, nullable=True)     # 0–100, set by Scorer
     match_reasoning = Column(Text, nullable=True)  # Claude explanation
+    country_code = Column(String(5), default="FR")           # ISO 3166-1 alpha-2
+    salary_currency = Column(String(3), nullable=True)       # Original currency code
+    salary_normalized_min = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
+    salary_normalized_max = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
     status: Column[str] = Column(SAEnum(JobStatus), default=JobStatus.NEW, nullable=False)
     scraped_at = Column(DateTime, default=datetime.utcnow)
 
@@ -189,6 +200,8 @@ class MatchResult(Base):
     strengths_json = Column(Text, nullable=True)
     concerns_json = Column(Text, nullable=True)
     model_used = Column(String(100), nullable=False)
+    evaluation_json = Column(Text, nullable=True)      # Full A-F block evaluation JSON
+    archetype = Column(String(50), nullable=True)       # Detected archetype key
     scored_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job", back_populates="match_result")
