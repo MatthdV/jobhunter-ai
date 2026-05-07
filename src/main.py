@@ -191,6 +191,82 @@ def apply(
 
 
 @app.command()
+def respond() -> None:
+    """Poll Gmail for recruiter replies and draft auto-responses (Phase 4).
+
+    Checks all SUBMITTED applications with a tracked Gmail thread, classifies
+    recruiter messages, and drafts replies via the configured LLM provider.
+    Sends a Telegram notification for each reply received.
+    """
+    import asyncio
+
+    from src.communications.email_handler import EmailHandler
+    from src.communications.recruiter_responder import RecruiterResponder
+    from src.config.settings import settings
+    from src.storage.database import get_session
+    from src.storage.models import Application, ApplicationStatus
+
+    console.print("[bold]Responding[/bold] — polling Gmail for recruiter replies…")
+
+    telegram = None
+    if settings.is_telegram_configured:
+        from src.communications.telegram_bot import TelegramBot
+        telegram = TelegramBot()
+
+    email_handler = EmailHandler()
+    responder = RecruiterResponder()
+
+    async def _run() -> int:
+        if telegram:
+            await telegram.start_polling()
+        try:
+            with get_session() as session:
+                submitted = (
+                    session.query(Application)
+                    .filter(
+                        Application.status == ApplicationStatus.SUBMITTED,
+                        Application.gmail_thread_id.isnot(None),
+                    )
+                    .all()
+                )
+                thread_ids = [a.gmail_thread_id for a in submitted if a.gmail_thread_id]
+                app_by_thread = {
+                    a.gmail_thread_id: a.id for a in submitted if a.gmail_thread_id
+                }
+
+            if not thread_ids:
+                return 0
+
+            replies = await email_handler.get_unread_replies(thread_ids)
+            handled = 0
+            for msg in replies:
+                app_id = app_by_thread.get(msg.thread_id)
+                if app_id is None:
+                    continue
+                with get_session() as session:
+                    app = session.get(Application, app_id)
+                    if app is None:
+                        continue
+                    draft = await responder.handle(msg, app)
+                    if draft is not None:
+                        app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
+                    if telegram:
+                        job = app.job
+                        await telegram.notify_reply_received(
+                            job, msg.sender, msg.body[:200]
+                        )
+                await email_handler.mark_as_read(msg.message_id)
+                handled += 1
+            return handled
+        finally:
+            if telegram:
+                await telegram.stop_polling()
+
+    handled = asyncio.run(_run())
+    console.print(f"[bold green]Done.[/bold green] {handled} reply/replies handled.")
+
+
+@app.command()
 def status() -> None:
     """Show pipeline summary: scraped / matched / applied / replied / interviews."""
     raise NotImplementedError("Phase 2 — status dashboard not yet implemented")

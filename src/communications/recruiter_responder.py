@@ -1,14 +1,15 @@
-"""Automated responses to recruiter emails using Claude."""
+"""Automated responses to recruiter emails using the configured LLM provider."""
 
 import logging
 from pathlib import Path
 from typing import Any
 
-import anthropic
 import yaml
 
 from src.communications.email_handler import EmailMessage
-from src.config.settings import ConfigurationError, settings
+from src.config.settings import settings
+from src.llm.base import LLMClient
+from src.llm.factory import get_client
 from src.storage.models import Application
 
 logger = logging.getLogger(__name__)
@@ -47,16 +48,13 @@ class RecruiterResponder:
         response = await responder.handle(message, application)
     """
 
-    def __init__(self) -> None:
-        """Initialise Anthropic client and load profile.yaml."""
-        if not settings.anthropic_api_key:
-            raise ConfigurationError(
-                "ANTHROPIC_API_KEY is not set — cannot initialise RecruiterResponder"
-            )
+    def __init__(self, client: LLMClient | None = None) -> None:
+        """Initialise LLM client and load profile.yaml."""
+        if client is None:
+            client = get_client(settings.llm_provider)
+        self._client = client
         with open(_PROFILE_PATH) as f:
             self._profile: dict[str, Any] = yaml.safe_load(f)
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self._model = settings.anthropic_model
 
     # ------------------------------------------------------------------
     # Slice 31 — classify
@@ -68,21 +66,11 @@ class RecruiterResponder:
         Returns one of: 'interview_invite', 'info_request', 'rejection',
         'scam', 'other'.
         """
-        resp = await self._client.messages.create(
-            model=self._model,
+        text = await self._client.complete(
+            prompt=f"Subject: {message.subject}\n\nBody:\n{message.body[:1000]}",
             max_tokens=20,
             system=_CLASSIFY_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Subject: {message.subject}\n\nBody:\n{message.body[:1000]}"
-                    ),
-                }
-            ],
         )
-        block = resp.content[0]
-        text = block.text if hasattr(block, "text") else ""
         return text.strip().lower()
 
     # ------------------------------------------------------------------
@@ -117,32 +105,15 @@ class RecruiterResponder:
             f"Propose 2-3 availability slots (Mon-Fri, 10h-18h). "
             f"Keep it concise (under 100 words)."
         )
-        resp = await self._client.messages.create(
-            model=self._model,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        block = resp.content[0]
-        text = block.text if hasattr(block, "text") else ""
-        return text.strip()
+        return (await self._client.complete(prompt=prompt, max_tokens=200)).strip()
 
     async def detect_scam(self, message: EmailMessage) -> bool:
         """Return True if the message shows scam indicators."""
-        resp = await self._client.messages.create(
-            model=self._model,
+        text = await self._client.complete(
+            prompt=f"Subject: {message.subject}\n\nBody:\n{message.body[:1000]}",
             max_tokens=10,
             system=_SCAM_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Subject: {message.subject}\n\nBody:\n{message.body[:1000]}"
-                    ),
-                }
-            ],
         )
-        block = resp.content[0]
-        text = block.text if hasattr(block, "text") else ""
         return text.strip().lower() == "true"
 
     async def _draft_info_reply(self, message: EmailMessage) -> str:
@@ -156,11 +127,4 @@ class RecruiterResponder:
             f"Original email:\nSubject: {message.subject}\n{message.body[:500]}\n\n"
             f"Keep it under 80 words."
         )
-        resp = await self._client.messages.create(
-            model=self._model,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        block = resp.content[0]
-        text = block.text if hasattr(block, "text") else ""
-        return text.strip()
+        return (await self._client.complete(prompt=prompt, max_tokens=200)).strip()

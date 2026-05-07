@@ -70,9 +70,19 @@ def mock_bot() -> MagicMock:
 
 @pytest.fixture
 def telegram_bot(
-    mock_telegram_settings: None, mock_bot: MagicMock, monkeypatch: pytest.MonkeyPatch
+    mock_telegram_settings: None, mock_bot: MagicMock
 ) -> "TelegramBot":
-    with patch("src.communications.telegram_bot.telegram.Bot", return_value=mock_bot):
+    """Build a TelegramBot with the PTB Application builder chain fully mocked."""
+    mock_ptb_app = MagicMock()
+    mock_ptb_app.bot = mock_bot
+    mock_ptb_app.add_handler = MagicMock()
+
+    mock_builder = MagicMock()
+    mock_builder.token = MagicMock(return_value=mock_builder)
+    mock_builder.build = MagicMock(return_value=mock_ptb_app)
+
+    with patch("src.communications.telegram_bot.Application") as MockApp:
+        MockApp.builder = MagicMock(return_value=mock_builder)
         from src.communications.telegram_bot import TelegramBot
         return TelegramBot()
 
@@ -82,13 +92,25 @@ def telegram_bot(
 # ---------------------------------------------------------------------------
 
 
+def _mock_ptb_application() -> MagicMock:
+    """Return a minimal mock for the PTB Application builder chain."""
+    mock_ptb_app = MagicMock()
+    mock_ptb_app.add_handler = MagicMock()
+    mock_builder = MagicMock()
+    mock_builder.token = MagicMock(return_value=mock_builder)
+    mock_builder.build = MagicMock(return_value=mock_ptb_app)
+    mock_app_cls = MagicMock()
+    mock_app_cls.builder = MagicMock(return_value=mock_builder)
+    return mock_app_cls
+
+
 class TestTelegramBotInit:
     def test_init_raises_without_bot_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "src.communications.telegram_bot.settings",
             MagicMock(telegram_bot_token="", telegram_chat_id="123456"),
         )
-        with patch("src.communications.telegram_bot.telegram.Bot"):
+        with patch("src.communications.telegram_bot.Application", _mock_ptb_application()):
             from src.communications.telegram_bot import TelegramBot
             with pytest.raises(ConfigurationError):
                 TelegramBot()
@@ -98,13 +120,13 @@ class TestTelegramBotInit:
             "src.communications.telegram_bot.settings",
             MagicMock(telegram_bot_token="test-token", telegram_chat_id=""),
         )
-        with patch("src.communications.telegram_bot.telegram.Bot"):
+        with patch("src.communications.telegram_bot.Application", _mock_ptb_application()):
             from src.communications.telegram_bot import TelegramBot
             with pytest.raises(ConfigurationError):
                 TelegramBot()
 
     def test_init_succeeds_with_valid_config(self, mock_telegram_settings: None) -> None:
-        with patch("src.communications.telegram_bot.telegram.Bot"):
+        with patch("src.communications.telegram_bot.Application", _mock_ptb_application()):
             from src.communications.telegram_bot import TelegramBot
             bot = TelegramBot()
             assert bot is not None

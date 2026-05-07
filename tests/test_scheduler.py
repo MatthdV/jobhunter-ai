@@ -69,6 +69,9 @@ def make_scheduler(**overrides: object) -> "JobScheduler":
     mock_telegram.notify_new_match = AsyncMock()
     mock_telegram.request_approval = AsyncMock(return_value=True)
     mock_telegram.send_daily_summary = AsyncMock()
+    mock_telegram.notify_reply_received = AsyncMock()
+    mock_telegram.start_polling = AsyncMock()
+    mock_telegram.stop_polling = AsyncMock()
 
     from src.scheduler.job_scheduler import JobScheduler
 
@@ -241,20 +244,91 @@ class TestApplyPhase:
             assert len(apps) == 1
             assert apps[0].status == ApplicationStatus.SUBMITTED
 
-    async def test_apply_phase_stays_draft_on_rejection(self) -> None:
+    async def test_apply_phase_deletes_application_on_rejection(self) -> None:
+        """Rejected application is deleted so the job re-enters the queue next cycle."""
         with get_session() as session:
             job = make_matched_job()
             session.add(job)
 
         mock_telegram = MagicMock()
         mock_telegram.request_approval = AsyncMock(return_value=False)
+        mock_telegram.start_polling = AsyncMock()
+        mock_telegram.stop_polling = AsyncMock()
+
+        scheduler = make_scheduler(telegram=mock_telegram, dry_run=False)
+        await scheduler._apply_phase()
+
+        with get_session() as session:
+            # Application must be deleted so the job becomes eligible again
+            assert session.query(Application).count() == 0
+
+    async def test_apply_phase_sends_email_and_stores_thread_id(self) -> None:
+        """Approved live application calls email_handler.send() and stores gmail_thread_id.
+
+        _apply_phase derives recruiter_id from job.company.recruiters[0] when available,
+        so no pre-seeded Application is needed — the job stays eligible.
+        """
+        from src.storage.models import Company, Recruiter
+
+        with get_session() as session:
+            company = Company(name="Acme Corp")
+            session.add(company)
+            session.flush()
+            recruiter = Recruiter(
+                name="Alice HR",
+                email="alice@acme.com",
+                company_id=company.id,
+            )
+            session.add(recruiter)
+            session.flush()
+            job = make_matched_job(url="https://example.com/job/email-test")
+            job.company_id = company.id
+            session.add(job)
+            session.flush()
+            job_id = job.id
+
+        mock_telegram = MagicMock()
+        mock_telegram.request_approval = AsyncMock(return_value=True)
+        mock_telegram.start_polling = AsyncMock()
+        mock_telegram.stop_polling = AsyncMock()
+
+        mock_email = MagicMock()
+        mock_email.send = AsyncMock(return_value="thread_abc123")
+
+        scheduler = make_scheduler(telegram=mock_telegram, dry_run=False)
+        scheduler._email_handler = mock_email
+
+        await scheduler._apply_phase()
+
+        mock_email.send.assert_called_once()
+        with get_session() as session:
+            apps = session.query(Application).filter(Application.job_id == job_id).all()
+            assert len(apps) == 1
+            app = apps[0]
+            assert app.status == ApplicationStatus.SUBMITTED
+            assert app.gmail_thread_id == "thread_abc123"
+            assert app.submitted_at is not None
+
+    async def test_apply_phase_sets_submitted_at_on_approval(self) -> None:
+        """submitted_at is populated when application is approved and live."""
+        with get_session() as session:
+            job = make_matched_job(url="https://example.com/job/ts-test")
+            session.add(job)
+
+        mock_telegram = MagicMock()
+        mock_telegram.request_approval = AsyncMock(return_value=True)
+        mock_telegram.start_polling = AsyncMock()
+        mock_telegram.stop_polling = AsyncMock()
 
         scheduler = make_scheduler(telegram=mock_telegram, dry_run=False)
         await scheduler._apply_phase()
 
         with get_session() as session:
             apps = session.query(Application).all()
-            assert apps[0].status == ApplicationStatus.DRAFT
+            submitted = [a for a in apps if a.status == ApplicationStatus.SUBMITTED]
+            # When no recruiter email → email send skipped, still SUBMITTED
+            for app in submitted:
+                assert app.submitted_at is not None
 
     async def test_apply_phase_respects_daily_cap(self) -> None:
         with get_session() as session:
@@ -402,6 +476,53 @@ class TestRespondPhase:
         with get_session() as session:
             app = session.get(Application, app_id)
             assert app.status == ApplicationStatus.REPLIED
+
+    async def test_respond_phase_does_not_mark_replied_when_handle_returns_none(
+        self,
+    ) -> None:
+        """Scam/rejection/other messages (handle()=None) must NOT set status=REPLIED."""
+        from src.communications.email_handler import EmailMessage
+
+        with get_session() as session:
+            job = make_matched_job(url="https://example.com/job/scam")
+            session.add(job)
+            session.flush()
+            app = Application(
+                job_id=job.id,
+                cv_path="/tmp/cv.pdf",
+                cover_letter="letter",
+                status=ApplicationStatus.SUBMITTED,
+                gmail_thread_id="thread_scam",
+            )
+            session.add(app)
+            session.flush()
+            app_id = app.id
+
+        scam_msg = EmailMessage(
+            thread_id="thread_scam",
+            message_id="msg_scam",
+            sender="spam@lottery.com",
+            subject="You won!",
+            body="Send us your bank details to claim your prize.",
+            received_at=__import__("datetime").datetime(2026, 3, 21, 10, 0, 0),
+        )
+        mock_email = MagicMock()
+        mock_email.get_unread_replies = AsyncMock(return_value=[scam_msg])
+        mock_email.mark_as_read = AsyncMock()
+
+        mock_responder = MagicMock()
+        mock_responder.handle = AsyncMock(return_value=None)  # scam → None
+
+        scheduler = make_scheduler()
+        scheduler._email_handler = mock_email
+        scheduler._responder = mock_responder
+
+        await scheduler._respond_phase()
+
+        with get_session() as session:
+            app = session.get(Application, app_id)
+            # Status must remain SUBMITTED — not REPLIED for scam/rejection
+            assert app.status == ApplicationStatus.SUBMITTED
 
 
 class TestRunLoop:

@@ -2,10 +2,27 @@
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Pipeline](https://img.shields.io/badge/Gmail→Scorer-operational-brightgreen.svg)](#current-status)
 
-Système semi-autonome de recherche d'emploi piloté par IA. Scraping → matching → génération de candidatures personnalisées → validation humaine → suivi des réponses.
+Système semi-autonome de recherche d'emploi piloté par IA.
+
+**Gmail alerts → scoring LLM multi-critères → matching ≥ 80% → CV + lettre personnalisés → validation humaine → envoi.**
 
 Tu n'as qu'à **passer les entretiens**.
+
+## Current Status
+
+| Phase | Composant | Statut |
+|-------|-----------|--------|
+| 2 — Recherche | Gmail alerts scraper | ✅ Opérationnel |
+| 2 — Recherche | Scorer LLM (5 blocs, score A–F) | ✅ Opérationnel |
+| 2 — Recherche | JSearch / Indeed API | 🚧 Subscription requise |
+| 2 — Recherche | WTTJ / LinkedIn scraper | 📋 Planifié |
+| 3 — Candidature | CV + lettre personnalisés | 📋 Planifié |
+| 4 — Réponse | Réponses automatiques | 📋 Planifié |
+| 5 — RDV | Briefing entreprise + prep entretien | 📋 Planifié |
+
+**Résultats semaine 1** : 49 offres collectées → 42 scorées → 2 matchs qualifiés (≥ 80%)
 
 ## Quick Start
 
@@ -17,22 +34,33 @@ pip install -e ".[dev]"
 
 # 2. Configurer l'environnement
 cp .env.example .env
-# Remplir .env avec vos clés API (voir section Supported LLM Providers)
+# Remplir .env (voir section LLM Providers ci-dessous)
 
 # 3. Initialiser la base de données
 python -m src.main init-db
 
-# 4. Installer Playwright (scraping, première fois uniquement)
-playwright install chromium
+# 4. Scanner via Gmail alerts (pipeline opérationnel)
+python -m src.main scan --source gmail_alerts --limit 50
 
-# 5. Scanner les offres
-python -m src.main scan --source wttj --limit 20
-
-# 6. Lancer le matching IA (score > 80%)
+# 5. Lancer le matching IA
 python -m src.main match --min-score 80
 
-# 7. Générer les candidatures (dry-run par défaut)
+# 6. Générer les candidatures (dry-run par défaut)
 python -m src.main apply --dry-run
+```
+
+### Exemple de sortie
+
+```
+$ python -m src.main scan --source gmail_alerts --limit 50
+[INFO] GmailJobAlertScraper: fetching alerts...
+[INFO] 49 jobs found, 42 new
+[INFO] Scoring 42 jobs with LLM...
+
+$ python -m src.main match --min-score 80
+[INFO] 2 jobs matched (score ≥ 80%)
+  → "Automation & AI Manager" @ Contentsquare   [score: 87/100]
+  → "RevOps Lead" @ Aircall                     [score: 82/100]
 ```
 
 ## Supported LLM Providers
@@ -41,41 +69,18 @@ Choisir le provider via `LLM_PROVIDER` dans `.env` :
 
 | Provider | `LLM_PROVIDER` | Modèle par défaut | Variable clé |
 |---|---|---|---|
-| Anthropic (Claude) | `anthropic` | `claude-opus-4-6` | `ANTHROPIC_API_KEY` |
+| Anthropic (Claude) | `anthropic` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` |
 | OpenAI | `openai` | `gpt-4o` | `OPENAI_API_KEY` |
 | Mistral | `mistral` | `mistral-large-latest` | `MISTRAL_API_KEY` |
 | DeepSeek | `deepseek` | `deepseek-chat` | `DEEPSEEK_API_KEY` |
 | OpenRouter | `openrouter` | `openai/gpt-4o` | `OPENROUTER_API_KEY` |
 
-### Exemples `.env`
-
-**Anthropic (défaut)**
 ```env
+# Anthropic (défaut)
 LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
-```
 
-**OpenAI**
-```env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini   # optionnel, override le modèle par défaut
-```
-
-**Mistral**
-```env
-LLM_PROVIDER=mistral
-MISTRAL_API_KEY=...
-```
-
-**DeepSeek**
-```env
-LLM_PROVIDER=deepseek
-DEEPSEEK_API_KEY=sk-...
-```
-
-**OpenRouter** (accès à 100+ modèles : Llama, Gemini, Qwen, Kimi…)
-```env
+# OpenRouter — accès 100+ modèles (Llama, Gemini, Qwen…)
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-...
 LLM_MODEL=meta-llama/llama-3.1-70b-instruct
@@ -85,7 +90,7 @@ LLM_MODEL=meta-llama/llama-3.1-70b-instruct
 
 ```
 Phase 1 — Préparation  : Analyse profil, génération CV adaptatif
-Phase 2 — Recherche    : Scraping (LinkedIn, Indeed, WTTJ, AngelList), matching IA (score > 80%)
+Phase 2 — Recherche    : Gmail alerts + JSearch/Indeed/WTTJ → scoring LLM → matching ≥ 80%  ← ici
 Phase 3 — Candidature  : CV + lettre personnalisés → validation humaine → soumission
 Phase 4 — Réponse      : Réponses automatiques, détection scam, négociation salariale
 Phase 5 — RDV          : Intégration Calendly, briefing entreprise, préparation entretien
@@ -93,60 +98,86 @@ Phase 5 — RDV          : Intégration Calendly, briefing entreprise, préparat
 
 ```
 src/
-├── main.py               # CLI Typer — point d'entrée
+├── main.py                    # CLI Typer — point d'entrée
 ├── config/
-│   ├── settings.py       # Pydantic Settings (charge .env)
-│   └── profile.yaml      # Profil candidat, rôles cibles, entreprises
+│   ├── settings.py            # Pydantic Settings (charge .env)
+│   └── profile.yaml           # Profil candidat, rôles cibles, entreprises ← source de vérité
 ├── storage/
-│   ├── models.py         # SQLAlchemy ORM : Job, Application, Company, Recruiter
-│   └── database.py       # Engine, session factory, init_db(), health_check()
-├── scrapers/             # Phase 2 — BaseScraper + LinkedIn/Indeed/WTTJ
-├── matching/             # Phase 2 — Scorer (LLM), EmbeddingMatcher
-├── generators/           # Phase 3 — CVGenerator, CoverLetterGenerator
-├── communications/       # Phase 4 — EmailHandler, TelegramBot, RecruiterResponder
-├── scheduler/            # Phase 4 — JobScheduler orchestre toutes les phases
-└── analysis/             # Analyse de profil
+│   ├── models.py              # SQLAlchemy ORM : Job, Application, Company, Recruiter
+│   └── database.py            # Engine, session factory, init_db()
+├── scrapers/
+│   ├── gmail_scraper.py       # ✅ Gmail alerts → jobs DB
+│   ├── indeed_scraper.py      # 🚧 JSearch API (subscription requise)
+│   └── base.py                # BaseScraper
+├── matching/
+│   └── scorer.py              # ✅ Scoring LLM 5 blocs (skills/exp/sector/salary/remote)
+├── generators/                # 📋 CVGenerator, CoverLetterGenerator
+├── communications/            # 📋 EmailHandler, TelegramBot, RecruiterResponder
+└── scheduler/                 # 📋 JobScheduler orchestre toutes les phases
 ```
+
+## Scoring multi-blocs
+
+Le scorer évalue chaque offre sur 5 dimensions via LLM, sans embeddings :
+
+| Bloc | Poids | Ce qui est évalué |
+|------|-------|-------------------|
+| Skills match | 35% | Compétences techniques vs JD |
+| Expérience | 25% | Séniorité, secteurs, taille équipe |
+| Secteur / entreprise | 20% | Culture, stage, notoriété |
+| Salaire | 10% | Fourchette vs attentes |
+| Remote / localisation | 10% | Modalités de travail |
+
+Score final → grade A–F. Seuil candidature : ≥ 80 (grade A/B).
 
 ## Commandes CLI
 
 ```bash
 python -m src.main --help
-python -m src.main init-db                          # Initialiser la DB
-python -m src.main scan --source linkedin --limit 20  # Scraper les offres
-python -m src.main scan --source wttj --limit 50
-python -m src.main match                            # Scorer toutes les offres NEW
-python -m src.main match --min-score 80             # Seuil personnalisé
-python -m src.main apply --dry-run                  # Générer les candidatures (sans envoi)
-python -m src.main apply --live                     # Envoi réel (validation Telegram requise)
+python -m src.main init-db
+
+# Scraping
+python -m src.main scan --source gmail_alerts --limit 50   # ✅ opérationnel
+python -m src.main scan --source indeed --limit 20         # 🚧 JSearch requis
+python -m src.main scan --source wttj --limit 50           # 📋 planifié
+
+# Matching
+python -m src.main match --min-score 80
+
+# Candidature
+python -m src.main apply --dry-run    # génère sans envoyer
+python -m src.main apply --live       # envoi réel (validation Telegram requise)
 ```
 
 ## Décisions de design
 
-- **Human-in-the-loop** : `TelegramBot.request_approval()` bloque avant tout envoi — ne jamais bypasser cette gate
+- **Human-in-the-loop** : `TelegramBot.request_approval()` bloque avant tout envoi — gate non bypassable
 - **Dry-run par défaut** : `DRY_RUN=true` dans `.env` ; `--live` requis pour soumettre
-- **Cap journalier** : `MAX_APPLICATIONS_PER_DAY` protège contre les bans
-- **Seuil de matching** : seuls les jobs avec `match_score >= MIN_MATCH_SCORE` passent en candidature
-- **Source de vérité profil** : `src/config/profile.yaml` pilote le scoring, la génération CV et les keywords — modifier ici, pas dans le code
-- **Personnalisation** : chaque CV et lettre est adapté à l'offre via LLM — jamais de candidature générique
+- **Cap journalier** : `MAX_APPLICATIONS_PER_DAY` protège contre les bans plateformes
+- **Profile YAML** : `src/config/profile.yaml` pilote scoring + CV + keywords — une seule source de vérité
+- **Personnalisation sur volume** : chaque candidature est tailored via LLM — zéro candidature générique
+- **Provider-agnostic** : swap LLM en 1 ligne d'env var — pas de lock-in Anthropic
 
 ## Tests
 
 ```bash
-pytest                                  # Tous les tests
-pytest tests/test_scheduler.py -v      # Un seul fichier
-pytest -k "test_score"                 # Un test spécifique
+pytest                              # tous les tests
+pytest tests/test_scrapers.py -v    # scrapers uniquement
+pytest -k "test_score"              # un test spécifique
 ```
 
-## Objectifs KPI
+## Roadmap
 
-| KPI | Objectif |
-|-----|----------|
-| Offres analysées | 50/jour |
-| Candidatures envoyées | 5-10/jour |
-| Taux de réponse | > 15% |
-| Entretiens obtenus | 2-3/semaine |
+- [ ] JSearch / RapidAPI → jobs avec JD complet (blocker actuel : subscription)
+- [ ] WTTJ + LinkedIn scrapers
+- [ ] CV génératif (Jinja2 → WeasyPrint → PDF)
+- [ ] Cover letter personnalisée par offre
+- [ ] Telegram bot validation gate
+- [ ] Gmail auto-réponses recruters
+- [ ] Dashboard web (FastAPI + SQLite)
 
 ## Auteur
 
 **Matthieu de Villele** — Automation & AI Engineer / RevOps Consultant
+
+[LinkedIn](https://www.linkedin.com/in/matthieudevillele/) · [GitHub](https://github.com/MatthdV)

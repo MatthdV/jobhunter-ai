@@ -69,6 +69,12 @@ class JobScheduler:
                 from src.communications.telegram_bot import TelegramBot
                 telegram = TelegramBot()
 
+            if settings.is_gmail_configured:
+                from src.communications.email_handler import EmailHandler
+                from src.communications.recruiter_responder import RecruiterResponder
+                email_handler = EmailHandler()
+                responder = RecruiterResponder()
+
         self._scorer = scorer
         self._cv_gen = cv_gen
         self._cl_gen = cl_gen
@@ -90,24 +96,31 @@ class JobScheduler:
 
     async def run_once(self) -> None:
         """Execute a full pipeline cycle (scan → match → apply → respond)."""
-        phases: list[tuple[str, Any]] = [
-            ("scan", lambda: self._scan_phase()),
-            ("match", lambda: self._match_phase()),
-            ("apply", lambda: self._apply_phase()),
-            ("respond", lambda: self._respond_phase()),
-        ]
-        for name, phase_fn in phases:
-            try:
-                count = await phase_fn()
-                logger.info("Phase '%s' completed: %s items", name, count)
-            except Exception:
-                logger.exception("Phase '%s' raised an error — continuing", name)
-
         if self._telegram:
-            try:
-                await self._telegram.send_daily_summary()
-            except Exception:
-                logger.exception("Daily summary failed")
+            await self._telegram.start_polling()
+
+        try:
+            phases: list[tuple[str, Any]] = [
+                ("scan", lambda: self._scan_phase()),
+                ("match", lambda: self._match_phase()),
+                ("apply", lambda: self._apply_phase()),
+                ("respond", lambda: self._respond_phase()),
+            ]
+            for name, phase_fn in phases:
+                try:
+                    count = await phase_fn()
+                    logger.info("Phase '%s' completed: %s items", name, count)
+                except Exception:
+                    logger.exception("Phase '%s' raised an error — continuing", name)
+
+            if self._telegram:
+                try:
+                    await self._telegram.send_daily_summary()
+                except Exception:
+                    logger.exception("Daily summary failed")
+        finally:
+            if self._telegram:
+                await self._telegram.stop_polling()
 
     async def run_loop(self, interval: int = 3600) -> None:
         """Run the pipeline on a recurring schedule.
@@ -222,9 +235,12 @@ class JobScheduler:
         submitted_count = 0
 
         for job_id in eligible_ids:
-            # Fetch fresh job (scalar attributes only; generators use title/description)
+            # Fetch fresh job + derive recruiter from company (inside session)
             with get_session() as session:
                 job = session.get(Job, job_id)
+                recruiter_id: int | None = None
+                if job and job.company and job.company.recruiters:
+                    recruiter_id = job.company.recruiters[0].id
 
             # Generate CV and cover letter (async, outside session)
             cv_path = await self._cv_gen.generate(job, self._output_dir)
@@ -234,6 +250,7 @@ class JobScheduler:
             with get_session() as session:
                 app = Application(
                     job_id=job_id,
+                    recruiter_id=recruiter_id,
                     cv_path=str(cv_path),
                     cover_letter=letter,
                     status=ApplicationStatus.DRAFT,
@@ -261,12 +278,38 @@ class JobScheduler:
                     approved = not self._dry_run
 
                 if approved and not self._dry_run:
+                    # Send email and track the Gmail thread
+                    gmail_thread_id: str | None = None
+                    if self._email_handler and fresh_job.company:
+                        recruiter_email = (
+                            fresh_app.recruiter.email
+                            if fresh_app.recruiter
+                            else None
+                        )
+                        if recruiter_email:
+                            try:
+                                gmail_thread_id = await self._email_handler.send(
+                                    to=recruiter_email,
+                                    subject=f"Candidature — {fresh_job.title}",
+                                    body=fresh_app.cover_letter or "",
+                                    attachments=[fresh_app.cv_path] if fresh_app.cv_path else None,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Email send failed for job %d — leaving DRAFT", job_id
+                                )
+                                fresh_app.status = ApplicationStatus.DRAFT  # type: ignore[assignment]
+                                continue
+
                     fresh_app.status = ApplicationStatus.SUBMITTED  # type: ignore[assignment]
+                    fresh_app.submitted_at = datetime.utcnow()  # type: ignore[assignment]
+                    fresh_app.gmail_thread_id = gmail_thread_id  # type: ignore[assignment]
                     fresh_job.status = JobStatus.APPLIED  # type: ignore[assignment]
                     submitted_count += 1
-                else:
-                    # Revert to DRAFT on rejection or dry-run
-                    fresh_app.status = ApplicationStatus.DRAFT  # type: ignore[assignment]
+                elif not self._dry_run:
+                    # Live + rejected/timeout: delete so job re-enters queue next cycle
+                    session.delete(fresh_app)
+                # dry_run: keep DRAFT for human review — no deletion
 
         return created_count if self._dry_run else submitted_count
 
@@ -314,8 +357,11 @@ class JobScheduler:
                 app = session.get(Application, app_id)
                 if app is None:
                     continue
-                await self._responder.handle(msg, app)
-                app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
+                draft_response = await self._responder.handle(msg, app)
+                # Only mark REPLIED when the recruiter sent a meaningful message
+                # (handle() returns None for scam/rejection/unrecognised intent)
+                if draft_response is not None:
+                    app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
                 if self._telegram:
                     job = app.job
                     await self._telegram.notify_reply_received(
