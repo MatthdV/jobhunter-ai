@@ -73,7 +73,10 @@ def scorer(monkeypatch: pytest.MonkeyPatch, mock_llm_client: AsyncMock) -> Score
     """Scorer with mocked settings and injected mock LLMClient."""
     monkeypatch.setattr(
         "src.matching.scorer.settings",
-        MagicMock(min_match_score=80, llm_provider="anthropic", llm_model="claude-opus-4-6"),
+        MagicMock(
+            min_match_score=80, llm_provider="anthropic", llm_model="claude-opus-4-6",
+            llm_scoring_provider="", llm_scoring_model="",
+        ),
     )
     return Scorer(client=mock_llm_client)
 
@@ -141,7 +144,10 @@ class TestScorer:
         )
         monkeypatch.setattr(
             "src.matching.scorer.settings",
-            MagicMock(llm_provider="anthropic", min_match_score=80),
+            MagicMock(
+                llm_provider="anthropic", min_match_score=80,
+                llm_scoring_provider="", llm_scoring_model="",
+            ),
         )
         with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             Scorer()
