@@ -1,0 +1,44 @@
+{
+  "jobs": [
+    {
+      "id": 100001,
+      "title": "Senior AI Platform Engineer",
+      "location": {"name": "San Francisco, CA (Remote)"},
+      "absolute_url": "https://boards.greenhouse.io/anthropic/jobs/100001",
+      "updated_at": "2026-03-20T12:00:00Z",
+      "metadata": []
+    },
+    {
+      "id": 100002,
+      "title": "Automation Engineer — DevOps Tools",
+      "location": {"name": "Remote (US/EU)"},
+      "absolute_url": "https://boards.greenhouse.io/anthropic/jobs/100002",
+      "updated_at": "2026-03-18T09:30:00Z",
+      "metadata": []
+    },
+    {
+      "id": 100003,
+      "title": "Junior Research Intern",
+      "location": {"name": "San Francisco, CA"},
+      "absolute_url": "https://boards.greenhouse.io/anthropic/jobs/100003",
+      "updated_at": "2026-03-15T14:00:00Z",
+      "metadata": []
+    },
+    {
+      "id": 100004,
+      "title": "Solutions Architect",
+      "location": {"name": "London, UK (Remote)"},
+      "absolute_url": "https://boards.greenhouse.io/anthropic/jobs/100004",
+      "updated_at": "2026-03-22T10:00:00Z",
+      "metadata": []
+    },
+    {
+      "id": 100005,
+      "title": "Operations Manager",
+      "location": {"name": "San Francisco, CA"},
+      "absolute_url": "https://boards.greenhouse.io/anthropic/jobs/100005",
+      "updated_at": "2026-03-21T16:00:00Z",
+      "metadata": []
+    }
+  ]
+}

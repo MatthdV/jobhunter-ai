@@ -1,5 +1,7 @@
 """Scrapers package — exports all scrapers and factory functions."""
 
+from src.scrapers.career_pages import CareerPageScraper
+from src.scrapers.gmail_scraper import GmailJobAlertScraper
 from src.scrapers.indeed import IndeedScraper
 from src.scrapers.indeed_api import IndeedApiScraper
 from src.scrapers.linkedin import LinkedInScraper
@@ -23,6 +25,8 @@ def get_indeed_scraper() -> IndeedScraper | IndeedApiScraper:
 
 
 __all__ = [
+    "CareerPageScraper",
+    "GmailJobAlertScraper",
     "IndeedApiScraper",
     "IndeedScraper",
     "LinkedInScraper",

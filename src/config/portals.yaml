@@ -1,0 +1,81 @@
+# Direct career page scanner configuration
+# Supports: ashby, greenhouse, lever, custom
+portals:
+  # --- AI Labs ---
+  anthropic:
+    platform: greenhouse
+    slug: anthropic
+    careers_url: https://job-boards.greenhouse.io/anthropic
+    title_filter:
+      positive: [automation, engineer, AI, platform, architect, operations]
+      negative: [junior, intern, internship, stage]
+
+  mistral:
+    platform: custom
+    careers_url: https://mistral.ai/careers
+    title_filter:
+      positive: [engineer, platform, AI, operations]
+      negative: [junior, intern]
+
+  openai:
+    platform: greenhouse
+    slug: openai
+    careers_url: https://job-boards.greenhouse.io/openai
+    title_filter:
+      positive: [automation, engineer, platform, AI, operations]
+      negative: [junior, intern]
+
+  # --- Fintech (from profile.yaml targets) ---
+  qonto:
+    platform: greenhouse
+    slug: qonto
+    careers_url: https://job-boards.greenhouse.io/qonto
+    title_filter:
+      positive: [automation, engineer, AI, platform, data, devops]
+      negative: [junior, intern, stage, alternance]
+
+  alan:
+    platform: custom
+    careers_url: https://alan.com/careers
+    title_filter:
+      positive: [engineer, AI, automation, platform]
+      negative: [junior, intern]
+
+  # --- SaaS ---
+  notion:
+    platform: greenhouse
+    slug: notion
+    careers_url: https://job-boards.greenhouse.io/notion
+    title_filter:
+      positive: [engineer, platform, AI, automation]
+      negative: [junior, intern]
+
+  linear:
+    platform: ashby
+    slug: linear
+    careers_url: https://jobs.ashbyhq.com/linear
+    title_filter:
+      positive: [engineer, platform]
+      negative: [junior, intern]
+
+  vercel:
+    platform: greenhouse
+    slug: vercel
+    careers_url: https://job-boards.greenhouse.io/vercel
+    title_filter:
+      positive: [engineer, platform, AI]
+      negative: [junior, intern]
+
+  # --- Automation ---
+  n8n:
+    platform: ashby
+    slug: n8n
+    careers_url: https://jobs.ashbyhq.com/n8n
+    title_filter:
+      positive: [engineer, automation, AI, platform, solutions]
+      negative: [junior, intern]
+
+# Default title filter (applied to all portals unless overridden)
+default_title_filter:
+  positive: [automation, engineer, AI, platform, architect, revops, operations, consultant]
+  negative: [junior, intern, internship, stage, stagiaire, alternance]
