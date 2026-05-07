@@ -1,32 +1,50 @@
 # JobHunter AI
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![Tests](https://img.shields.io/badge/tests-81%20passing-brightgreen.svg)](#tests)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Semi-autonomous job search pipeline driven by LLM scoring. Scrapes job boards, scores each offer against your profile using a 6-block A–F evaluation, generates a tailored CV and cover letter per application, and handles recruiter replies — with a mandatory human validation gate before anything is sent.
+A job search pipeline I built for my own search — and kept building because the problem turned out to have more depth than expected.
 
-**You only show up for interviews.**
+It scrapes job boards, scores each offer with a 6-block LLM evaluation, generates a tailored CV and cover letter per application, then handles recruiter replies. The only human step is approving on Telegram before anything is sent.
 
-## Pipeline
+Numbers I'm targeting: 50 offers analyzed per day, 5–10 applications, 15%+ reply rate.
+
+## Why this exists
+
+Manual job searching is mostly pattern matching — read 50 JDs, mentally score them against your CV, write a cover letter that sounds vaguely personalized. It's slow and the quality degrades after about 10.
+
+This automates the mechanical parts. The LLM does the matching and personalization; I do the judgment calls on what to actually send.
+
+## How it works
 
 ```
-Gmail alerts ──┐
-Career pages   ├──► MCP bridge ──► Scorer A–F ──► CV + cover letter ──► [Telegram gate] ──► Submit
-Indeed API     │                       │
-WTTJ           ┘              Company research
+Gmail alerts ─┐
+Career pages  ├──► score (A–F) ──► generate CV + letter ──► [Telegram gate] ──► submit
+Indeed API    ┘         │
+                  company research
 ```
 
-| Phase | What it does | Status |
-|-------|-------------|--------|
-| 2 — Recherche | Gmail alerts, Indeed API, WTTJ, career pages (Greenhouse/Ashby), MCP bridge | ✅ |
-| 2 — Scoring | Multi-bloc A–F evaluator + archetypes + company research | ✅ |
-| 3 — Candidature | CV (Jinja2 → WeasyPrint) + cover letter, per-offer via LLM | ✅ |
-| 4 — Réponse | Gmail polling, recruiter reply classifier, Telegram notifications | ✅ |
-| Dashboard | FastAPI + HTMX web UI — pipeline control + job review | ✅ |
-| LinkedIn scraper | Available, disabled by default (ToS risk) | ⚠️ |
-| Phase 5 — RDV | Calendly integration, interview prep | 🔲 |
+Each offer gets scored across 6 blocks. The global score (0–100) comes from a weighted average of block scores — the LLM never outputs a number directly. That was a deliberate choice: asking a model to output "score: 82" produces drift and hallucinated confidence. Computing it server-side from structured data is stable.
 
-## Quick Start
+| Block | Weight | What it evaluates |
+|-------|--------|-------------------|
+| A — Role summary | 10% | Archetype detection, seniority, work arrangement |
+| B — CV match | 25% | Matched requirements with evidence + gaps with severity |
+| C — Level strategy | 15% | Seniority positioning, whether to push up or anchor |
+| D — Compensation | 15% | PPP-adjusted salary fit |
+| E — Personalization | 20% | Specific CV edits + cover letter angles for this offer |
+| F — Interview prep | 15% | STAR story mapping, likely hard questions |
+
+Score formula: `((weighted_avg_1–5 − 1.0) / 4.0) × 100`. Missing blocks default to 3.0 with a warning logged. Threshold to proceed: ≥80.
+
+## Stack
+
+Python 3.11+ · FastAPI · HTMX · SQLAlchemy 2 + Alembic · Playwright · Pydantic Settings · Typer · Jinja2 + WeasyPrint · Anthropic / OpenAI / Mistral / DeepSeek / OpenRouter
+
+The LLM layer is provider-agnostic. Swap `LLM_PROVIDER` in `.env` and nothing else changes. I run scoring on Claude Sonnet and generation on a cheaper model — that's what `LLM_SCORING_PROVIDER` / `LLM_SCORING_MODEL` are for.
+
+## Quick start
 
 ```bash
 git clone https://github.com/MatthdV/jobhunter-ai.git
@@ -34,12 +52,12 @@ cd jobhunter-ai
 pip install -e ".[dev]"
 
 cp .env.example .env
-# Fill in LLM_PROVIDER + API key, Gmail credentials, Telegram token
+# Add your LLM provider key, Gmail OAuth credentials, Telegram token
 
 python -m src.main init-db
 alembic upgrade head
 
-# Scan + score
+# Run the pipeline
 python -m src.main scan --source gmail_alerts --limit 50
 python -m src.main match --min-score 80 --detailed
 
@@ -47,63 +65,67 @@ python -m src.main match --min-score 80 --detailed
 uvicorn src.api.app:app --reload   # http://localhost:8000
 ```
 
-## Scoring — 6-block A–F evaluation
+## What's implemented
 
-Each offer is scored by an LLM across 6 structured blocks. The global score (0–100) is computed deterministically from block scores; the LLM never outputs the final number.
-
-| Block | Weight | What it evaluates |
-|-------|--------|-------------------|
-| A — Role summary | 10% | Archetype detection, seniority, work arrangement |
-| B — CV match | 25% | Matched requirements + gaps with severity |
-| C — Level strategy | 15% | Seniority fit and positioning notes |
-| D — Compensation | 15% | PPP-adjusted salary vs target |
-| E — Personalization | 20% | CV edits + cover letter hooks per offer |
-| F — Interview prep | 15% | STAR story mapping, red-flag questions |
-
-Score formula: `((weighted_avg_1–5 − 1.0) / 4.0) × 100`. Missing blocks default to 3.0.
+| Component | Status |
+|-----------|--------|
+| Gmail job-alert scraper | ✅ |
+| Career pages — Greenhouse REST + Ashby GraphQL | ✅ |
+| Indeed via JSearch API | ✅ (requires RapidAPI subscription) |
+| WTTJ scraper | ✅ |
+| LinkedIn scraper | ⚠️ works, disabled by default (ToS risk) |
+| MCP bridge — batch JSON importer | ✅ |
+| 6-block A–F scorer with archetypes | ✅ |
+| Company research — web enrichment | ✅ |
+| STAR story bank | ✅ |
+| CV generation — Jinja2 → WeasyPrint → PDF | ✅ |
+| Cover letter generation | ✅ |
+| Recruiter reply handling — classify + draft | ✅ |
+| Telegram approval gate + daily summary | ✅ |
+| FastAPI + HTMX web dashboard | ✅ |
+| Phase 5 — Calendly + interview prep | 🔲 |
 
 ## Architecture
 
 ```
 src/
-├── main.py                     # Typer CLI
-├── api/                        # FastAPI + HTMX dashboard
-│   ├── app.py
-│   └── routes/                 # pages, jobs, stats, pipeline
+├── main.py                      # Typer CLI — entry point
+├── api/                         # FastAPI + HTMX dashboard
+│   └── routes/                  # pages, jobs, stats, pipeline
 ├── config/
-│   ├── settings.py             # Pydantic Settings — loads .env
-│   ├── profile.yaml            # Candidate profile + search config ← source of truth
-│   ├── portals.yaml            # Career page portals (Greenhouse/Ashby)
-│   └── stories.yaml            # STAR+R interview story bank
+│   ├── settings.py              # Pydantic Settings, loads .env
+│   ├── profile.yaml             # Candidate profile + search config — source of truth
+│   ├── portals.yaml             # Career page portals (Greenhouse, Ashby)
+│   └── stories.yaml             # STAR+R interview story bank
 ├── storage/
-│   ├── models.py               # SQLAlchemy: Job, Company, Application, MatchResult
+│   ├── models.py                # Job, Company, Application, MatchResult
 │   └── database.py
 ├── scrapers/
-│   ├── gmail_scraper.py        # Gmail job-alert emails → Job stubs → JSearch enrich
-│   ├── indeed_scraper.py       # JSearch API + Playwright fallback
-│   ├── career_pages.py         # Greenhouse REST + Ashby GraphQL
+│   ├── gmail_scraper.py         # Job-alert emails → stubs → JSearch enrichment
+│   ├── indeed_scraper.py        # JSearch API + Playwright fallback
+│   ├── career_pages.py          # Greenhouse REST + Ashby GraphQL
 │   ├── wttj_scraper.py
-│   └── linkedin_scraper.py     # playwright-stealth (ToS risk — disabled by default)
+│   └── linkedin_scraper.py      # playwright-stealth
 ├── importers/
-│   └── mcp_bridge.py           # Drains data/mcp_inbox/ JSON batches
+│   └── mcp_bridge.py            # Drains data/mcp_inbox/ JSON batches
 ├── matching/
-│   ├── scorer.py               # Multi-bloc A–F evaluator
-│   └── archetypes.py           # Role archetype detection from profile.yaml
+│   ├── scorer.py                # 6-block A–F evaluator
+│   └── archetypes.py            # Role archetype detection
 ├── interview/
-│   └── story_bank.py           # STAR+R story library (stories.yaml)
+│   └── story_bank.py            # STAR+R library
 ├── analysis/
-│   └── company_researcher.py   # Web-search enrichment → Company model
+│   └── company_researcher.py    # Web-search enrichment → Company model
 ├── generators/
-│   ├── cv_generator.py         # Jinja2 → WeasyPrint → PDF
+│   ├── cv_generator.py
 │   └── cover_letter_generator.py
 ├── communications/
-│   ├── email_handler.py        # Gmail API send + thread tracking
-│   ├── telegram_bot.py         # Approval gate + daily summary
-│   └── recruiter_responder.py  # Reply classifier + draft generation
+│   ├── email_handler.py         # Gmail API
+│   ├── telegram_bot.py          # Approval gate + notifications
+│   └── recruiter_responder.py   # Reply classifier + draft
 ├── scheduler/
-│   └── job_scheduler.py        # Orchestrates: import_mcp → scan → research → match → apply → respond
+│   └── job_scheduler.py         # Full cycle: import → scan → research → match → apply → respond
 └── llm/
-    ├── base.py                 # Abstract LLMClient
+    ├── base.py                  # Abstract LLMClient
     ├── anthropic_client.py
     ├── openai_client.py
     ├── mistral_client.py
@@ -112,9 +134,54 @@ src/
     └── factory.py
 ```
 
-## LLM Providers
+## CLI reference
 
-Set `LLM_PROVIDER` in `.env`. Optionally set `LLM_SCORING_PROVIDER` to use a different model for scoring vs generation.
+```bash
+# Scanning
+python -m src.main scan --source gmail_alerts --limit 50
+python -m src.main scan --source gmail_alerts --parse-only   # print stubs, skip DB
+python -m src.main scan --source indeed_api --limit 20
+python -m src.main scan --source wttj --limit 50
+python -m src.main scan --source career_pages
+
+# Scoring
+python -m src.main match --min-score 80
+python -m src.main match --min-score 80 --detailed           # full A–F breakdown
+
+# Company research
+python -m src.main research "Anthropic"
+
+# Applications
+python -m src.main apply --dry-run    # generate without sending
+python -m src.main apply --live       # requires Telegram approval
+
+# Recruiter replies
+python -m src.main respond
+
+# Full pipeline cycle
+python -m src.main run-once
+```
+
+## Design notes
+
+**Human-in-the-loop gate.** `TelegramBot.request_approval()` blocks before any submission. It cannot be bypassed — `apply --live` fails without a Telegram token, and dry-run is the default.
+
+**Profile as source of truth.** `src/config/profile.yaml` drives scoring prompts, CV generation, keyword rotation, and country tiers. Changing it changes everything — there's no secondary config to keep in sync.
+
+**Deterministic scoring.** The LLM outputs block scores (1.0–5.0 floats). The global score is computed from those with a fixed formula. If a block is missing, it defaults to 3.0 and logs a warning rather than crashing.
+
+**Session hygiene.** The async SQLAlchemy session had some sharp edges — specifically, you can't hold a sync session open across an `await`. The scorer opens session 1 to load IDs, closes it, then opens session 2 for async scoring. The apply phase snapshots job data into a dict before closing the session to avoid `DetachedInstanceError`.
+
+## Tests
+
+```bash
+pytest                                       # all 81 tests
+pytest tests/test_scorer_multibloc.py -v    # A–F scorer
+pytest tests/test_scorer_deterministic_score.py -v
+pytest -k "test_score"
+```
+
+## LLM providers
 
 | Provider | `LLM_PROVIDER` | Default model | Key |
 |---|---|---|---|
@@ -124,55 +191,8 @@ Set `LLM_PROVIDER` in `.env`. Optionally set `LLM_SCORING_PROVIDER` to use a dif
 | DeepSeek | `deepseek` | `deepseek-chat` | `DEEPSEEK_API_KEY` |
 | OpenRouter | `openrouter` | `openai/gpt-4o` | `OPENROUTER_API_KEY` |
 
-## CLI Reference
-
-```bash
-python -m src.main init-db
-
-# Scraping
-python -m src.main scan --source gmail_alerts --limit 50
-python -m src.main scan --source gmail_alerts --parse-only   # dry run: print stubs only
-python -m src.main scan --source indeed_api  --limit 20
-python -m src.main scan --source wttj        --limit 50
-python -m src.main scan --source career_pages
-
-# Scoring
-python -m src.main match --min-score 80
-python -m src.main match --min-score 80 --detailed           # print full A–F breakdown
-
-# Company research
-python -m src.main research "Anthropic"
-
-# Applications
-python -m src.main apply --dry-run   # generate CV + letter, no send
-python -m src.main apply --live      # requires Telegram approval
-
-# Recruiter replies
-python -m src.main respond
-
-# Full pipeline (one cycle)
-python -m src.main run-once
-```
-
-## Key Design Decisions
-
-- **Human-in-the-loop gate** — `TelegramBot.request_approval()` blocks before any submission; cannot be bypassed
-- **Dry-run default** — `settings.dry_run = True`; `--live` required to submit
-- **Daily cap** — `MAX_APPLICATIONS_PER_DAY` hard-limits sends to avoid platform bans
-- **Profile as source of truth** — `src/config/profile.yaml` drives scoring prompts, CV generation, keyword rotation, and country tiers; edit there, not in code
-- **Deterministic scoring** — global score computed server-side from block scores; LLM never outputs a final number (avoids hallucination drift)
-- **Provider-agnostic LLM** — swap in one env var; separate `LLM_SCORING_PROVIDER` / `LLM_SCORING_MODEL` for cost optimisation
-
-## Tests
-
-```bash
-pytest                                      # all tests
-pytest tests/test_scorer_multibloc.py -v   # A–F scorer
-pytest -k "test_score"                      # pattern match
-```
-
 ## Author
 
-**Matthieu de Villele** — Automation & AI Engineer / RevOps Consultant
+**Matthieu de Villele** — Automation & AI Engineer
 
 [LinkedIn](https://www.linkedin.com/in/matthieudevillele/) · [GitHub](https://github.com/MatthdV)
