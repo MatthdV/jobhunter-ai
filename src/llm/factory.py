@@ -12,17 +12,18 @@ _DEFAULT_MODELS: dict[str, str] = {
 }
 
 
-def get_client(provider: str) -> LLMClient:
+def get_client(provider: str, model: str | None = None) -> LLMClient:
     """Return an LLMClient instance for the given provider name.
 
     Args:
         provider: One of "anthropic", "openai", "mistral", "deepseek", "openrouter".
+        model: Optional model override. Falls back to settings.llm_model, then provider default.
 
     Raises:
         ValueError: If the provider is not recognised.
         ConfigurationError: If the required API key is missing.
     """
-    model = settings.llm_model or _DEFAULT_MODELS.get(provider, "")
+    model = model or settings.llm_model or _DEFAULT_MODELS.get(provider, "")
 
     if provider == "anthropic":
         from src.llm.anthropic_client import AnthropicClient

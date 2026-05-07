@@ -1,0 +1,36 @@
+# Interview story bank — STAR+R format
+# Each story maps to archetypes and common interview questions
+stories:
+  - id: story_n8n_migration
+    title: "Migration of 200+ workflows from Zapier to n8n"
+    archetypes: [automation_engineer, platform_engineer]
+    tags: [scaling, migration, automation, cost-reduction]
+    star:
+      situation: "Company was spending 50k€/month on Zapier with 200+ workflows across 5 teams"
+      task: "Lead the migration to self-hosted n8n within 3 months, zero downtime"
+      action: "Mapped all workflows, built migration tooling, parallel-ran both systems, trained 20 users"
+      result: "Completed in 2.5 months, saved 40k€/month, improved execution speed by 3x"
+      reflection: "Learned that the hardest part wasn't technical — it was change management. Next time I'd involve end users earlier in testing."
+
+  - id: story_revops_alignment
+    title: "Unified sales-marketing pipeline with HubSpot"
+    archetypes: [revops_consultant, ai_transformation]
+    tags: [crm, alignment, revenue, go-to-market]
+    star:
+      situation: "Sales and marketing were using separate tools, no shared pipeline visibility"
+      task: "Design and implement a unified RevOps stack on HubSpot"
+      action: "Mapped entire GTM process, built custom properties, automated lead scoring and routing"
+      result: "30% increase in SQL-to-close rate, full pipeline visibility for leadership"
+      reflection: "Data quality was the bottleneck nobody wanted to address. Built automated cleanup to solve it."
+
+  # Template pour ajouter des stories :
+  # - id: story_xxx
+  #   title: "..."
+  #   archetypes: [...]
+  #   tags: [...]
+  #   star:
+  #     situation: "..."
+  #     task: "..."
+  #     action: "..."
+  #     result: "..."
+  #     reflection: "..."
