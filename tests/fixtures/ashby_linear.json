@@ -1,0 +1,29 @@
+{
+  "data": {
+    "jobBoard": {
+      "jobPostings": [
+        {
+          "id": "ashby-lin-001",
+          "title": "Senior Platform Engineer",
+          "locationName": "Remote (US/EU)",
+          "publishedDate": "2026-03-19T08:00:00Z",
+          "externalLink": "https://jobs.ashbyhq.com/linear/ashby-lin-001"
+        },
+        {
+          "id": "ashby-lin-002",
+          "title": "Junior Frontend Intern",
+          "locationName": "San Francisco, CA",
+          "publishedDate": "2026-03-17T11:00:00Z",
+          "externalLink": "https://jobs.ashbyhq.com/linear/ashby-lin-002"
+        },
+        {
+          "id": "ashby-lin-003",
+          "title": "Staff Engineer — Infrastructure",
+          "locationName": "Remote",
+          "publishedDate": "2026-03-20T15:30:00Z",
+          "externalLink": "https://jobs.ashbyhq.com/linear/ashby-lin-003"
+        }
+      ]
+    }
+  }
+}
