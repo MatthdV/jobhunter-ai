@@ -1,87 +1,33 @@
-# JobHunter AI — Project Guidelines
+# Jobhunter AI — Context
 
-## Overview
+> ARTEFACT GÉNÉRÉ — ne pas éditer manuellement.
+> Source : Matthieu_local/projets/jobhunter/historique.md | Régénéré le 2026-05-07 via /archive
 
-Semi-autonomous job search pipeline: scrape → match → apply → respond.
-Multi-country search with salary normalization (PPP-adjusted EUR).
+## Infos critiques
+- Repo : ~/Documents/Claude/Projects/jobhunter-ai/
+- Stack : Python 3.14, FastAPI, SQLAlchemy, Playwright, Typer CLI, Anthropic/OpenRouter/Mistral APIs
+- DB : SQLite local (`jobhunter.db`) — peut se corrompre si kill mid-write → `sqlite3 db.db "PRAGMA integrity_check"`
+- APIs : Anthropic, OpenRouter, Gmail OAuth2, JSearch RapidAPI (expirée → 403), Telegram Bot
+- Web UI : `uvicorn src.api.app:app --reload` (port 8000) — livré en session 2026-05-07
+- Deploy : local (CLI + dashboard web)
 
-## Architecture
+## État actuel
+- Dernière tâche : Dashboard web FastAPI/HTMX/Tailwind livré. 81 tests passants. Commit `4f58d68` sur `claude/musing-nobel-245332`
+- Prochaine étape : Merger `claude/musing-nobel-245332` → `main` puis vérifier dashboard live avec `uvicorn src.api.app:app --reload`
 
-```
-src/
-├── config/          # profile.yaml (candidate profile + search config), settings.py
-├── scrapers/        # BaseScraper + WTTJ, Indeed (API + Playwright), LinkedIn
-├── utils/           # salary_normalizer.py (PPP conversion)
-├── storage/         # SQLAlchemy models (Job, Company, Application, etc.) + Alembic
-├── matching/        # LLM-based scorer (profile.yaml vs job)
-├── generators/      # CV (Jinja2 + WeasyPrint) + cover letter (LLM)
-├── communications/  # Telegram bot, Gmail handler, recruiter responder
-├── scheduler/       # Pipeline orchestrator (scan → match → apply → respond)
-├── llm/             # Multi-provider LLM clients (Anthropic, OpenAI, Mistral, etc.)
-├── importers/       # LinkedIn export ZIP → profile.yaml
-├── analysis/        # Profile analyzer
-└── main.py          # Typer CLI
-```
+## Décisions clés (3 plus récentes)
+- Dashboard : FastAPI + Jinja2 + HTMX no-build — rejeté : React SPA (transpilation inutile)
+- Background tasks : `background_tasks.add_task(_run_scan)` direct — rejeté : `asyncio.ensure_future` (crash sans event loop)
+- `TemplateResponse(request, name, ctx)` Starlette v0.27+ — rejeté : ancienne signature → `unhashable dict` en cache Jinja2
 
-## Commands
+## Watch out
+- `tracker.start(name)` doit être appelé dans le route handler *avant* `add_task` — sinon race window 409
+- `_run_match` : charger IDs en session 1 (fermée), rouvrir session 2 pour scoring async — évite session sync tenue sur await
+- `_run_apply` : extraire snapshot job en dict avant fermeture session — évite `DetachedInstanceError`
+- JSearch subscription expirée (`69cebe676d…`) → pipeline fonctionne en stub (titre/company, pas JD)
+- Activer venv : `source .venv/bin/activate` (Python 3.14)
 
-```bash
-# Dependencies
-.venv/bin/pip install -e ".[dev]"
-
-# Tests (ALWAYS use .venv/bin/python — system Python is 3.9, incompatible)
-.venv/bin/python -m pytest tests/ --no-header -q
-.venv/bin/python -m pytest tests/test_scrapers.py -x  # specific file
-
-# CLI
-.venv/bin/python -m src.main scan --source wttj --limit 10
-.venv/bin/python -m src.main match --min-score 80
-.venv/bin/python -m src.main apply --dry-run
-
-# Migrations
-.venv/bin/python -m alembic upgrade head
-.venv/bin/python -m alembic revision --autogenerate -m "description"
-```
-
-## Multi-Country Search
-
-Configured in `src/config/profile.yaml` under `search:`:
-
-```yaml
-search:
-  countries: ["FR", "US", "GB", "DE", "NL", "ES", "CH", "BE", "CA", "SE"]
-  location: "remote"
-  base_currency: "EUR"
-```
-
-### Scraper Support
-
-| Scraper      | Countries supported |
-|-------------|-------------------|
-| WTTJ        | FR only           |
-| Indeed API   | All 10            |
-| Indeed (PW)  | All 10            |
-| LinkedIn     | All 10 (geoId)    |
-
-### Salary Normalization
-
-`src/utils/salary_normalizer.py` converts salaries to EUR and applies purchasing power parity (PPP) coefficients. France is baseline (1.0). Job model stores both original (`salary_min`/`salary_max`) and normalized (`salary_normalized_min`/`salary_normalized_max`).
-
-## Key Patterns
-
-- **Scrapers**: All extend `BaseScraper` with `_fetch_raw()` + `_parse_raw()`. Country passed via `country_code` param (default "FR").
-- **Rate limiting**: Token bucket per scraper with MIN_DELAY/MAX_DELAY/MAX_RPH.
-- **Deduplication**: By URL, both in-batch and cross-session (seen_urls set).
-- **LLM scoring**: Claude scores jobs 0-100 against profile.yaml. PPP-normalized salaries in prompt.
-- **Database**: SQLAlchemy 2.0 + Alembic migrations. SQLite default, PostgreSQL for multi-tenant.
-
-## Testing
-
-- TDD vertical slices: test → impl → test → impl
-- 250+ tests, pytest + pytest-asyncio
-- Mock Playwright with fixture files in `tests/fixtures/`
-- DB tests use `sqlite:///:memory:` with autouse fixture
-
-## Multi-Tenant Backend (API)
-
-FastAPI backend in `api/` for multi-user SaaS mode. Next.js frontend in `web/`.
+## Session carry-forward
+- Aniket Sen (ex-manager Groupon) a demandé à voir le repo — opportunité réseau, réponse LinkedIn à rédiger
+- 10+ jobs cluster 74-79 — avec JSearch actif beaucoup passeront ≥80
+- Branche `claude/musing-nobel-245332` pas encore mergée sur main

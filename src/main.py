@@ -18,11 +18,14 @@ console = Console()
 @app.command()
 def scan(
     sources: list[str] = typer.Option(  # noqa: B008
-        ["linkedin", "indeed", "wttj"],
+        ["gmail_alerts", "indeed_api", "wttj"],
         "--source", "-s",
-        help="Job boards to scrape.",
+        help="Job boards to scan. linkedin available but disabled by default (ToS risk).",
     ),
     limit: int = typer.Option(50, "--limit", "-l", help="Max offers per source."),
+    parse_only: bool = typer.Option(
+        False, "--parse-only", help="gmail_alerts: print extracted stubs, skip JSearch + DB."
+    ),
 ) -> None:
     """Scrape job boards across configured countries and store new offers."""
     import asyncio
@@ -62,7 +65,71 @@ def scan(
             existing_urls: set[str] = {u for (u,) in session.query(Job.url).all()}
 
         total = 0
+
+        # Gmail job-alert scraper — separate flow (no keywords, reads emails)
+        if "gmail_alerts" in sources:
+            from src.scrapers.gmail_scraper import GmailJobAlertScraper
+
+            try:
+                async with GmailJobAlertScraper() as gmail_scraper:
+                    if parse_only:
+                        stubs = await gmail_scraper._fetch_stubs(max_emails=limit)
+                        console.print(
+                            f"[bold]gmail_alerts parse-only:[/bold] "
+                            f"{len(stubs)} stub(s) extracted\n"
+                        )
+                        for i, s in enumerate(stubs, 1):
+                            console.print(
+                                f"  [{i}] [cyan]{s['title']}[/cyan] "
+                                f"@ [yellow]{s.get('company') or '?'}[/yellow] "
+                                f"— {s.get('location') or '?'}\n"
+                                f"      {s['url']}"
+                            )
+                    else:
+                        jobs = await gmail_scraper.scan_alerts(
+                            max_emails=limit,
+                            seen_urls=existing_urls,
+                            country_code=countries[0] if countries else "FR",
+                        )
+                        fresh = [j for j in jobs if j.url not in existing_urls]
+                        if fresh:
+                            with get_session() as session:
+                                for job in fresh:
+                                    session.add(job)
+                                    existing_urls.add(job.url)
+                            total += len(fresh)
+                        console.print(
+                            f"  gmail_alerts: [green]{len(fresh)}[/green] new, "
+                            f"{len(jobs) - len(fresh)} dupes"
+                        )
+            except Exception as exc:
+                console.print(f"[red]gmail_alerts init error:[/red] {exc}")
+
+        # Career pages scanner — separate flow (no keywords, iterates portals)
+        if "career_pages" in sources:
+            from src.scrapers.career_pages import CareerPageScraper
+
+            try:
+                async with CareerPageScraper() as cp_scraper:
+                    jobs = await cp_scraper.scan_all_portals(seen_urls=existing_urls)
+                    fresh = [j for j in jobs if j.url not in existing_urls]
+                    if fresh:
+                        with get_session() as session:
+                            for job in fresh:
+                                session.add(job)
+                                existing_urls.add(job.url)
+                        total += len(fresh)
+                    console.print(
+                        f"  career_pages: [green]{len(fresh)}[/green] new, "
+                        f"{len(jobs) - len(fresh)} dupes"
+                    )
+            except Exception as exc:
+                console.print(f"[red]career_pages init error:[/red] {exc}")
+
+        # Standard keyword-based scrapers
         for source in sources:
+            if source == "career_pages":
+                continue
             if source not in _scraper_map:
                 console.print(f"[yellow]Unknown source: {source}[/yellow]")
                 continue
@@ -122,28 +189,51 @@ def scan(
 @app.command()
 def match(
     min_score: int = typer.Option(80, "--min-score", help="Minimum match score (0–100)."),
+    detailed: bool = typer.Option(False, "--detailed", help="Print full A-F evaluation."),
 ) -> None:
     """Score all NEW jobs against the candidate profile using Claude."""
     import asyncio
+    import json as _json
 
     from src.matching.scorer import Scorer
     from src.storage.database import get_session
-    from src.storage.models import Job, JobStatus
+    from src.storage.models import Job, JobStatus, MatchResult
 
     console.print(f"[bold]Matching[/bold] NEW jobs (min_score={min_score})…")
 
-    async def _run() -> tuple[int, int]:
+    async def _run() -> tuple[int, int, list[dict]]:
         scorer = Scorer()
         with get_session() as session:
             new_jobs = session.query(Job).filter(Job.status == JobStatus.NEW).all()
             if not new_jobs:
-                return 0, 0
+                return 0, 0, []
             console.print(f"  Scoring {len(new_jobs)} job(s)…")
             results = await scorer.score_batch(new_jobs, session)
             matched = sum(1 for j in new_jobs if j.status == JobStatus.MATCHED)
-        return len(results), matched
+            # Collect display data while session is still open
+            display = []
+            for mr in results:
+                display.append({
+                    "title": mr.job.title,
+                    "score": mr.score,
+                    "evaluation_json": mr.evaluation_json,
+                    "archetype": mr.archetype,
+                })
+        return len(results), matched, display
 
-    total, matched = asyncio.run(_run())
+    total, matched, display = asyncio.run(_run())
+
+    if detailed and display:
+        for d in display:
+            console.print(f"\n[bold]{d['title']}[/bold] — score={d['score']}")
+            if d["evaluation_json"]:
+                eval_data = _json.loads(d["evaluation_json"])
+                for block_name, block_data in eval_data.get("blocks", {}).items():
+                    block_score = block_data.get("score", "?")
+                    console.print(f"  {block_name}: {block_score}/5.0")
+            if d["archetype"]:
+                console.print(f"  Archetype: {d['archetype']}")
+
     console.print(
         f"[bold green]Done.[/bold green] {total} scored, {matched} matched (≥{min_score})."
     )
@@ -228,6 +318,36 @@ def apply(
 
 
 @app.command()
+def research(
+    company: str = typer.Argument(..., help="Company name to research."),
+) -> None:
+    """Deep research a company. Outputs structured insight."""
+    import asyncio
+
+    from src.analysis.company_researcher import CompanyResearcher
+
+    console.print(f"[bold]Researching[/bold] {company}…")
+
+    async def _run() -> None:
+        researcher = CompanyResearcher()
+        insight = await researcher.research(company)
+        console.print(f"  Sector: {insight.sector or 'Unknown'}")
+        console.print(f"  Size: {insight.size_estimate or 'Unknown'}")
+        console.print(f"  Funding: {insight.funding_stage or 'Unknown'}")
+        console.print(f"  Tech stack: {', '.join(insight.tech_stack_signals) or 'Unknown'}")
+        console.print(f"  Culture: {', '.join(insight.culture_signals) or 'Unknown'}")
+        console.print(f"  Glassdoor: {insight.glassdoor_rating if insight.glassdoor_rating is not None else 'N/A'}")
+        console.print(f"  Growth: {', '.join(insight.growth_signals) or 'None'}")
+        if insight.red_flags:
+            console.print(f"  [red]Red flags: {', '.join(insight.red_flags)}[/red]")
+        else:
+            console.print("  Red flags: None")
+
+    asyncio.run(_run())
+    console.print("[bold green]Done.[/bold green]")
+
+
+@app.command()
 def status() -> None:
     """Show pipeline summary: scraped / matched / applied / replied / interviews."""
     raise NotImplementedError("Phase 2 — status dashboard not yet implemented")
@@ -263,6 +383,19 @@ def import_linkedin(
     except ValueError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1) from exc
+
+
+@app.command("import-mcp")
+def import_mcp_cmd() -> None:
+    """Import jobs from MCP bridge inbox (data/mcp_inbox/*.json)."""
+    from src.importers.mcp_bridge import MCPBridgeImporter
+    from src.storage.database import get_session
+
+    console.print("[bold]Importing[/bold] MCP bridge data…")
+    importer = MCPBridgeImporter()
+    with get_session() as session:
+        count = importer.import_pending(session)
+    console.print(f"[bold green]Done.[/bold green] {count} new job(s) imported from MCP.")
 
 
 @app.command("run-once")

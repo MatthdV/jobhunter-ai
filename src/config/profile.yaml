@@ -5,10 +5,10 @@
 
 candidate:
   name: Matthieu de Villele
-  title: Automation & AI Engineer / RevOps Consultant
-  experience_years: 10
-  location: Full Remote (Europe)
-  languages: [fr, en]
+  title: Automation & AI Engineer | n8n · LLM Integration · API Workflows | RevOps
+  experience_years: 8
+  location: Madrid, Spain (remote)
+  languages: [fr, en, es]
 
 salary:
   # Annual targets (CDI / contract)
@@ -41,17 +41,11 @@ target_roles:
     priority: 2
     keywords: [ai engineer, llm, langchain, rag, agents, openai, claude]
 
-  - title: Platform Engineer
+  - title: AI Transformation Lead
     match_score: 85
-    salary_range: "85-120k€"
+    salary_range: "90-130k€"
     priority: 2
-    keywords: [platform engineer, devops, cloud infrastructure, ci/cd, kubernetes]
-
-  - title: Solutions Architect
-    match_score: 80
-    salary_range: "100-140k€"
-    priority: 1
-    keywords: [solutions architect, technical architecture, system design]
+    keywords: [ai transformation, ai enablement, ai adoption, change management, ai strategy, ai implementation]
 
 # ---------------------------------------------------------------------------
 # Target companies
@@ -87,6 +81,13 @@ target_companies:
 # Search config — multi-country support
 # ---------------------------------------------------------------------------
 search:
+  # Tier A — marchés riches en remote, à couvrir à chaque cycle de 2 runs
+  countries_tier_a: ["FR", "US", "GB", "DE", "NL"]
+  # Tier B — marchés secondaires, rotation 1 run sur 3
+  countries_tier_b: ["ES", "CA", "CH"]
+  # Tier C — faibles résultats confirmés, rotation 1 run sur 6
+  countries_tier_c: ["BE", "SE"]
+  # Rotation recommandée : 3 pays par run = 2 de tier_a + 1 de tier_b/c
   countries: ["FR", "US", "GB", "DE", "NL", "ES", "CH", "BE", "CA", "SE"]
   location: "remote"
   base_currency: "EUR"
@@ -95,16 +96,22 @@ search:
 # Search keywords — used by scrapers
 # ---------------------------------------------------------------------------
 search_keywords:
-  - automation engineer
-  - AI engineer
-  - RevOps
-  - n8n expert
+  # Tier 1 — high signal, retours confirmés sur Indeed API
+  - AI automation engineer
+  - AI implementation engineer
+  - AI orchestration lead
   - workflow automation
-  - LLM integration
-  - process optimization
-  - CRM automation
-  - marketing automation
-  - sales automation
+  - revenue operations
+  # Tier 2 — plus larges, bons résultats US/UK
+  - AI transformation lead
+  - GTM automation engineer
+  - LLM integration engineer
+  - AI operations automation
+  - CRM automation engineer
+  # Tier 3 — exploratory, rotation occasionnelle
+  - AI enablement
+  - automation consultant
+  # RETIRÉS (zéro résultats confirmed) : "workflow automation n8n", "RevOps automation"
 
 # ---------------------------------------------------------------------------
 # Tech stack — used for matching and CV generation
@@ -114,13 +121,14 @@ skills:
   additional: [LangChain, RAG, MCP, Process Optimization, Workflow Automation]
 
   tech_stack:
-    languages: [Python, JavaScript, TypeScript, Go, SQL, Bash]
-    frameworks: [React, Next.js, Node.js, Express, Django, FastAPI]
-    cloud: [AWS, GCP, Azure, Docker, Kubernetes, Terraform]
-    automation: [n8n, Zapier, Make, GitHub Actions, CI/CD]
-    ai: [OpenAI, Claude, LangChain, RAG, Agents, MCP]
-    data: [PostgreSQL, MongoDB, Redis, Prisma, BigQuery]
-    tools: [Git, Linux, Playwright, VS Code]
+    languages: [Python, JavaScript, TypeScript, SQL, SOQL, Bash]
+    frameworks: [React, Next.js, Node.js, Express, FastAPI]
+    cloud: [AWS, Vercel, Docker]
+    automation: [n8n, Make, Zapier, GitHub Actions]
+    ai: [OpenAI, Claude, Gemini, LangChain, RAG, Agents, MCP, LiteLLM, Prompt Engineering]
+    data: [PostgreSQL, MongoDB, Prisma, BigQuery]
+    crm: [Salesforce, HubSpot, Pipedrive, Brevo, Planhat]
+    tools: [Git, Jira, Asana, Google Apps Script, Google Workspace APIs, Playwright, Zendesk, Intercom, Slack]
 
 # ---------------------------------------------------------------------------
 # Offer filters
@@ -141,21 +149,115 @@ filters:
 # Populated by: python -m src.main import-linkedin <zip>
 # ---------------------------------------------------------------------------
 experiences:
-  - id: exp_placeholder
-    company: "À compléter via import-linkedin"
-    title: "Automation & AI Engineer"
-    start: "2020-01"
+  - id: exp_groupon
+    company: "Groupon"
+    title: "Automation & AI Developer"
+    start: "2025-07"
     end: null
-    location: "Full Remote"
+    location: "Madrid (Remote)"
     bullets:
-      - "Importer votre profil LinkedIn avec: python -m src.main import-linkedin <zip>"
+      - "Designed and maintained 40+ critical automation workflows for incident management on a global e-commerce platform"
+      - "Built n8n incident response pipeline (4 interconnected workflows): auto document creation, approval collection, escalation — 80% reduction in manual follow-ups"
+      - "Architected RAG incident reporting system (LangChain + Gemini, PostgreSQL + BigQuery) auto-generating reports from Jira, Google Chat, Google Docs — 40% reduction in manual processing"
+      - "Built HYPR performance review system: Google Apps Script app (28 modules) using Gemini via LiteLLM to generate evaluations for 500+ employees"
+      - "Created bidirectional Jira ↔ Asana sync framework (GIF — Global Initiative Framework) for project approval processes"
+      - "Built Kindly Reminder: compliance monitoring system with configurable rules, automated weekly reports, and Jira auto-correction"
+
+  - id: exp_freelance
+    company: "Freelance"
+    title: "Automation & AI Consultant"
+    start: "2021-01"
+    end: "2025-06"
+    location: "Madrid (Remote)"
+    bullets:
+      - "Delivered automation solutions for 45+ clients (startups to enterprise), 150+ workflows deployed (n8n, Make, Zapier) with 99.9% uptime"
+      - "Built Plezi ↔ Pipedrive bidirectional sync: 10k+ contacts/month, 30% time saved"
+      - "Lead enrichment pipeline (Cognism/Lusha API): +25% conversion rate"
+      - "Deployed enterprise AI agents: marketing copywriting, 24/7 customer support, logistics planning"
+      - "Monitoring infrastructure for 60+ workflows via centralized logs and Slack alerts"
+
+  - id: exp_brevo
+    company: "Brevo (ex-Sendinblue)"
+    title: "RevOps Engineer — API Workflows & Automation"
+    start: "2023-03"
+    end: "2025-04"
+    location: "Madrid (Remote)"
+    bullets:
+      - "Built cascade lead generation tool (n8n): LinkedIn scraping → multi-source verification (Cognism, Kaspr, Lusha) → AI validation. 50% reduction in processing time"
+      - "Bidirectional CRM connector (Brevo ↔ Salesforce): JavaScript anti-duplication logic, 5000+ records/day, 99.9% reliability"
+      - "Deployed Planhat with integrations: Salesforce, BigQuery, Harvstr, Jira, Zendesk for 360° customer visibility"
+      - "Built 2 Zendesk apps: real-time analytics dashboard + AI assistant (ChatGPT) for content improvement"
+
+  - id: exp_plezi
+    company: "Plezi"
+    title: "Support Technique & Spécialiste Automation"
+    start: "2018-09"
+    end: "2023-05"
+    location: "Paris, France"
+    bullets:
+      - "Created 50+ automated integrations between Plezi and major CRMs (Salesforce, HubSpot, Pipedrive, Zoho) with 99%+ automation reliability"
+      - "Achieved 97.5% customer satisfaction in 2023"
+      - "Proposed and implemented Zapier-based process automations to increase support productivity"
+      - "Client support and bug tracking via Intercom, Zendesk, Jira"
 
 # ---------------------------------------------------------------------------
 # Education
 # ---------------------------------------------------------------------------
-education: []
+education:
+  - school: "Le Wagon"
+    degree: "Bootcamp Full-Stack Web Development"
+    years: "2021"
+  - school: "INSEEC School of Business & Economics"
+    degree: "Master 2 — Marketing Digital, Web Strategy & AI"
+    years: "2017-2019"
 
 # ---------------------------------------------------------------------------
 # Side projects
 # ---------------------------------------------------------------------------
 projects: []
+
+# ---------------------------------------------------------------------------
+# Role archetypes — determine evaluation focus per job type
+# ---------------------------------------------------------------------------
+archetypes:
+  automation_engineer:
+    label: "Automation / Workflow Engineer"
+    keywords: [automation, n8n, workflow, zapier, make, process, integration]
+    proof_priorities: ["n8n workflows built", "processes automated", "time saved"]
+    cv_emphasis: ["automation tools", "integration experience", "process optimization"]
+    interview_themes: ["scaling automation", "cross-team collaboration", "technical debt in workflows"]
+
+  revops_consultant:
+    label: "RevOps / Revenue Operations Consultant"
+    keywords: [revops, revenue operations, crm, salesforce, hubspot, go-to-market]
+    proof_priorities: ["revenue impact", "CRM implementations", "GTM alignment"]
+    cv_emphasis: ["revenue metrics", "CRM expertise", "cross-functional impact"]
+    interview_themes: ["GTM strategy", "sales-marketing alignment", "data-driven decisions"]
+
+  ai_engineer:
+    label: "AI / LLM Engineer"
+    keywords: [ai engineer, llm, langchain, rag, agents, ml, deep learning, openai, claude]
+    proof_priorities: ["AI systems deployed", "model performance metrics", "RAG implementations"]
+    cv_emphasis: ["AI/ML projects", "LLM integration", "production AI systems"]
+    interview_themes: ["AI architecture", "eval methodology", "responsible AI"]
+
+  platform_engineer:
+    label: "Platform / DevOps Engineer"
+    keywords: [platform, devops, infrastructure, cloud, kubernetes, terraform, ci/cd]
+    proof_priorities: ["infrastructure scaled", "deployment frequency", "reliability metrics"]
+    cv_emphasis: ["cloud infrastructure", "CI/CD pipelines", "system reliability"]
+    interview_themes: ["scaling challenges", "incident management", "developer experience"]
+
+  solutions_architect:
+    label: "Solutions Architect"
+    keywords: [solutions architect, technical architecture, system design, enterprise]
+    proof_priorities: ["architectures designed", "enterprise integrations", "technical leadership"]
+    cv_emphasis: ["system design", "stakeholder communication", "technical strategy"]
+    interview_themes: ["architecture decisions", "trade-offs", "cross-team influence"]
+
+  ai_transformation:
+    label: "AI Transformation / Enablement Lead"
+    keywords: [transformation, enablement, adoption, change management, ai strategy]
+    proof_priorities: ["adoption rates", "team enablement", "change management"]
+    cv_emphasis: ["organizational change", "training programs", "AI adoption metrics"]
+    interview_themes: ["change resistance", "measuring adoption", "executive buy-in"]
