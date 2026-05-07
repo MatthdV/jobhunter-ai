@@ -1,5 +1,6 @@
 # Git worktrees
 .worktrees/
+.claude/worktrees/
 
 # Environment & secrets — never commit
 .env
@@ -48,4 +49,18 @@ output/
 
 # Local notes & analysis
 jobhunter-ai_analyse_et_consignes.md
+jobhunter-ai-CLAUDE.md
 docs/superpowers/
+HANDOFF_RESUME.md
+INSTRUCTIONS_DETERMINISTIC_SCORE.md
+INTEGRATION_SPEC.md
+council-*.html
+council-*.md
+
+# Runtime data — not source-controlled
+data/cvs/
+data/linkedin_cookies.json
+data/mcp_inbox/processed/
+data/digest_*.html
+data/notes/
+*.db.corrupt

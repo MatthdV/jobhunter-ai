@@ -90,6 +90,13 @@ class Company(Base):
     linkedin_url = Column(String(500))
     notes = Column(Text)
     is_target = Column(Boolean, default=False)     # From profile.yaml target list
+    funding_stage = Column(String(50), nullable=True)
+    tech_stack_signals = Column(Text, nullable=True)    # JSON array
+    culture_signals = Column(Text, nullable=True)       # JSON array
+    glassdoor_rating = Column(Float, nullable=True)
+    growth_signals = Column(Text, nullable=True)        # JSON array
+    red_flags = Column(Text, nullable=True)             # JSON array
+    researched_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
@@ -193,6 +200,8 @@ class MatchResult(Base):
     strengths_json = Column(Text, nullable=True)
     concerns_json = Column(Text, nullable=True)
     model_used = Column(String(100), nullable=False)
+    evaluation_json = Column(Text, nullable=True)      # Full A-F block evaluation JSON
+    archetype = Column(String(50), nullable=True)       # Detected archetype key
     scored_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("Job", back_populates="match_result")
