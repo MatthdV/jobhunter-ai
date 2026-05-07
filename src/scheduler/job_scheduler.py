@@ -11,7 +11,7 @@ import yaml
 
 from src.config.settings import ConfigurationError, settings
 from src.storage.database import get_session
-from src.storage.models import Application, ApplicationStatus, Job, JobStatus
+from src.storage.models import Application, ApplicationStatus, Company, Job, JobStatus
 from src.utils.salary_normalizer import get_supported_countries
 
 logger = logging.getLogger(__name__)
@@ -92,9 +92,11 @@ class JobScheduler:
     # ------------------------------------------------------------------
 
     async def run_once(self) -> None:
-        """Execute a full pipeline cycle (scan → match → apply → respond)."""
+        """Execute a full pipeline cycle (import_mcp → scan → research → match → apply → respond)."""
         phases: list[tuple[str, Any]] = [
+            ("import_mcp", lambda: self._import_mcp_phase()),
             ("scan", lambda: self._scan_phase()),
+            ("research", lambda: self._research_phase()),
             ("match", lambda: self._match_phase()),
             ("apply", lambda: self._apply_phase()),
             ("respond", lambda: self._respond_phase()),
@@ -121,6 +123,23 @@ class JobScheduler:
         while True:
             await self.run_once()
             await asyncio.sleep(interval)
+
+    # ------------------------------------------------------------------
+    # MCP bridge import phase
+    # ------------------------------------------------------------------
+
+    async def _import_mcp_phase(self) -> int:
+        """Import jobs from MCP bridge inbox (data/mcp_inbox/*.json).
+
+        This runs at the start of each cycle to pick up any jobs
+        collected by the Cowork scheduled task via MCP Indeed.
+        Returns count of new jobs imported.
+        """
+        from src.importers.mcp_bridge import MCPBridgeImporter
+
+        with get_session() as session:
+            importer = MCPBridgeImporter()
+            return importer.import_pending(session)
 
     # ------------------------------------------------------------------
     # Slice 23 — _scan_phase
@@ -158,7 +177,33 @@ class JobScheduler:
             }
 
         new_count = 0
-        for scraper in scrapers:
+
+        # Career page scanner — separate flow (iterates portals, not keywords)
+        from src.scrapers.career_pages import CareerPageScraper
+
+        career_scrapers = [s for s in scrapers if isinstance(s, CareerPageScraper)]
+        keyword_scrapers = [s for s in scrapers if not isinstance(s, CareerPageScraper)]
+
+        for cp_scraper in career_scrapers:
+            try:
+                async with cp_scraper:
+                    jobs = await cp_scraper.scan_all_portals(seen_urls=existing_urls)
+                    fresh = [j for j in jobs if j.url not in existing_urls]
+                    if fresh:
+                        with get_session() as session:
+                            for job in fresh:
+                                session.add(job)
+                                existing_urls.add(job.url)
+                        new_count += len(fresh)
+                    logger.info(
+                        "career_pages: %d new, %d dupes",
+                        len(fresh), len(jobs) - len(fresh),
+                    )
+            except Exception:
+                logger.exception("CareerPageScraper error")
+
+        # Standard keyword-based scrapers
+        for scraper in keyword_scrapers:
             scraper_name = getattr(scraper, "source", "")
             supported = get_supported_countries(scraper_name)
             try:
@@ -202,6 +247,50 @@ class JobScheduler:
                 continue
 
         return new_count
+
+    # ------------------------------------------------------------------
+    # _research_phase — company deep research
+    # ------------------------------------------------------------------
+
+    async def _research_phase(self, max_companies: int = 10) -> int:
+        """Research companies for NEW jobs that haven't been researched yet.
+
+        Args:
+            max_companies: Max companies to research per cycle (rate limiting).
+
+        Returns:
+            Count of companies researched.
+        """
+        from src.analysis.company_researcher import CompanyResearcher
+
+        with get_session() as session:
+            # Find companies linked to NEW jobs that haven't been researched
+            unresearched = (
+                session.query(Company)
+                .join(Job, Job.company_id == Company.id)
+                .filter(
+                    Job.status == JobStatus.NEW,
+                    Company.researched_at.is_(None),
+                )
+                .distinct()
+                .limit(max_companies)
+                .all()
+            )
+
+            if not unresearched:
+                return 0
+
+            researcher = CompanyResearcher()
+            count = 0
+            for company in unresearched:
+                try:
+                    await researcher.enrich_company_model(company, session)
+                    count += 1
+                    logger.info("Researched company: %s", company.name)
+                except Exception:
+                    logger.exception("Research failed for company: %s", company.name)
+
+        return count
 
     # ------------------------------------------------------------------
     # Slice 24 — _match_phase
