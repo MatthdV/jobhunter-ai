@@ -64,3 +64,4 @@ data/mcp_inbox/processed/
 data/digest_*.html
 data/notes/
 *.db.corrupt
+web/
