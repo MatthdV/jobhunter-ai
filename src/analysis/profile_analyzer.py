@@ -262,11 +262,11 @@ def main() -> None:
     analyzer = ProfileAnalyzer()
 
     sample_text = """
-    Matthieu de Villele - Automation & AI Engineer
+    Jane Smith - Automation & AI Engineer
     10+ years experience in automation, RevOps, and AI systems.
     Expert in n8n, OpenAI, Claude, React, Node.js, Python.
     Built trading bots, job automation systems, and CRM integrations.
-    Full remote consultant available for FinTech and SaaS companies.
+    Full remote engineer available for FinTech and SaaS companies.
     """
 
     analysis = analyzer.analyze_text(sample_text)

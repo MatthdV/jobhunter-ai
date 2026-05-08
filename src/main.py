@@ -9,7 +9,7 @@ from rich.console import Console
 
 app = typer.Typer(
     name="jobhunter",
-    help="Semi-autonomous job search automation for Matthieu de Villele.",
+    help="Semi-autonomous job search pipeline — scan, score, apply, respond.",
     add_completion=False,
 )
 console = Console()

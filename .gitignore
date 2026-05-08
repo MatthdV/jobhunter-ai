@@ -47,7 +47,12 @@ output/
 .vscode/
 *.swp
 
+# Claude Code internal tooling — not for public consumption
+CLAUDE.md
+SKILL.md
+
 # Local notes & analysis
+REPORT_Matthieu.md
 jobhunter-ai_analyse_et_consignes.md
 jobhunter-ai-CLAUDE.md
 docs/superpowers/

@@ -6,6 +6,10 @@
 
 A job search pipeline I built for my own search — and kept building because the problem turned out to have more depth than expected.
 
+![Dashboard](docs/screenshots/dashboard.png)
+
+*53 offers scanned, 2 matched above threshold — pipeline controls trigger each phase independently.*
+
 It scrapes job boards, scores each offer with a 6-block LLM evaluation, generates a tailored CV and cover letter per application, then handles recruiter replies. The only human step is approving on Telegram before anything is sent.
 
 Numbers I'm targeting: 50 offers analyzed per day, 5–10 applications, 15%+ reply rate.
@@ -37,6 +41,8 @@ Each offer gets scored across 6 blocks. The global score (0–100) comes from a 
 | F — Interview prep | 15% | STAR story mapping, likely hard questions |
 
 Score formula: `((weighted_avg_1–5 − 1.0) / 4.0) × 100`. Missing blocks default to 3.0 with a warning logged. Threshold to proceed: ≥80.
+
+![Job detail — 79% match](docs/screenshots/job-detail.png)
 
 ## Stack
 
@@ -164,11 +170,14 @@ python -m src.main run-once
 
 ## Design notes
 
+**Why the scorer never asks the LLM for a number.**
+Early versions prompted the model with "rate this job 0–100." The outputs drifted — the same offer scored 71 one run and 84 the next, with confident-sounding reasoning in both cases. The fix was to decompose scoring into six binary classification prompts (matched requirement: yes/no, gap severity: low/medium/high, etc.) and compute the global score server-side from a fixed weighted formula. The LLM cannot hallucinate a number it is never asked to produce. Block scores missing from a response default to 3.0 with a logged warning rather than crashing the batch. This pattern — LLM as structured classifier, arithmetic server-side — is the core architectural decision in the codebase.
+
 **Human-in-the-loop gate.** `TelegramBot.request_approval()` blocks before any submission. It cannot be bypassed — `apply --live` fails without a Telegram token, and dry-run is the default.
 
 **Profile as source of truth.** `src/config/profile.yaml` drives scoring prompts, CV generation, keyword rotation, and country tiers. Changing it changes everything — there's no secondary config to keep in sync.
 
-**Deterministic scoring.** The LLM outputs block scores (1.0–5.0 floats). The global score is computed from those with a fixed formula. If a block is missing, it defaults to 3.0 and logs a warning rather than crashing.
+**Provider-agnostic LLM layer.** Swap `LLM_PROVIDER` in `.env` and nothing else changes. `LLM_SCORING_PROVIDER` and `LLM_SCORING_MODEL` allow running scoring on a capable model (Claude Sonnet) while generation uses a cheaper one — cost awareness baked into the config, not the code.
 
 **Session hygiene.** The async SQLAlchemy session had some sharp edges — specifically, you can't hold a sync session open across an `await`. The scorer opens session 1 to load IDs, closes it, then opens session 2 for async scoring. The apply phase snapshots job data into a dict before closing the session to avoid `DetachedInstanceError`.
 

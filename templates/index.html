@@ -39,10 +39,7 @@
     <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Contrôles pipeline</h2>
 
     <!-- Pipeline status polling (updates every 3s) -->
-    <div id="pipeline-status"
-         hx-get="/api/pipeline/status"
-         hx-trigger="load, every 3s"
-         hx-swap="outerHTML">
+    <div id="pipeline-status">
       <!-- Rendered by the server on first load, then auto-polled -->
       {% include "partials/pipeline_controls.html" ignore missing %}
 
