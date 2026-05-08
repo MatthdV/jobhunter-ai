@@ -1,0 +1,132 @@
+# ============================================================
+# Candidate profile — TEMPLATE
+# Copy to profile.yaml and fill in your details.
+# Never commit profile.yaml — it contains PII.
+# ============================================================
+
+candidate:
+  name: Your Name
+  title: Your Professional Title
+  experience_years: 5
+  location: City, Country
+  languages: [en, fr]
+
+salary:
+  min_annual: 50000
+  max_annual: 80000
+  min_daily_rate: 400
+  max_daily_rate: 700
+  currency: EUR
+
+# ---------------------------------------------------------------------------
+# Target roles — ordered by priority (descending)
+# ---------------------------------------------------------------------------
+target_roles:
+  - title: Role Title 1
+    match_score: 95
+    salary_range: "60-80k EUR"
+    priority: 3
+    keywords: [keyword1, keyword2, keyword3]
+
+  - title: Role Title 2
+    match_score: 90
+    salary_range: "55-75k EUR"
+    priority: 2
+    keywords: [keyword4, keyword5]
+
+# ---------------------------------------------------------------------------
+# Target companies
+# ---------------------------------------------------------------------------
+target_companies:
+  category_1:
+    - Company A
+    - Company B
+  category_2:
+    - Company C
+    - Company D
+
+# ---------------------------------------------------------------------------
+# Search config
+# ---------------------------------------------------------------------------
+search:
+  countries_tier_a: ["FR", "US"]
+  countries_tier_b: ["GB", "DE"]
+  countries_tier_c: ["NL"]
+  countries: ["FR", "US", "GB"]
+  location: "remote"
+  base_currency: "EUR"
+
+# ---------------------------------------------------------------------------
+# Search keywords — used by scrapers
+# ---------------------------------------------------------------------------
+search_keywords:
+  - your primary keyword 1
+  - your primary keyword 2
+  - your secondary keyword 1
+
+# ---------------------------------------------------------------------------
+# Skills
+# ---------------------------------------------------------------------------
+skills:
+  top_3: [Skill A, Skill B, Skill C]
+  additional: [Skill D, Skill E]
+
+  tech_stack:
+    languages: [Python, JavaScript]
+    frameworks: [React, FastAPI]
+    tools: [Git, Jira]
+
+# ---------------------------------------------------------------------------
+# Offer filters
+# ---------------------------------------------------------------------------
+filters:
+  remote_only: true
+  min_match_score: 80
+  preferred_contract_types: [CDI, Freelance, Contract]
+  excluded_keywords:
+    - junior
+    - internship
+    - stage
+
+# ---------------------------------------------------------------------------
+# Work experience — for CV generation
+# ---------------------------------------------------------------------------
+experiences:
+  - id: exp_current
+    company: "Current Company"
+    title: "Your Current Title"
+    start: "2023-01"
+    end: null
+    location: "City, Country"
+    bullets:
+      - "Achievement 1 with metrics"
+      - "Achievement 2 with metrics"
+
+  - id: exp_previous
+    company: "Previous Company"
+    title: "Your Previous Title"
+    start: "2020-01"
+    end: "2022-12"
+    location: "City, Country"
+    bullets:
+      - "Achievement 1"
+      - "Achievement 2"
+
+# ---------------------------------------------------------------------------
+# Education
+# ---------------------------------------------------------------------------
+education:
+  - school: "University Name"
+    degree: "Degree Title"
+    years: "2018-2020"
+
+# ---------------------------------------------------------------------------
+# Role archetypes — customize for your industry
+# ---------------------------------------------------------------------------
+archetypes:
+  archetype_1:
+    label: "Archetype Label"
+    keywords: [keyword1, keyword2]
+    proof_priorities: ["metric 1", "metric 2"]
+    cv_emphasis: ["emphasis 1", "emphasis 2"]
+    interview_themes: ["theme 1", "theme 2"]

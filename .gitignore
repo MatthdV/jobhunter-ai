@@ -47,6 +47,10 @@ output/
 .vscode/
 *.swp
 
+# Profiles — contain PII (name, email, phone, address, salary)
+profiles/
+src/config/profile.yaml
+
 # Claude Code internal tooling — not for public consumption
 CLAUDE.md
 SKILL.md
