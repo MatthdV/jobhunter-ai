@@ -39,8 +39,9 @@ def scan(
     from src.storage.models import Job
     from src.utils.salary_normalizer import get_supported_countries
 
-    profile_path = Path(__file__).parent / "config" / "profile.yaml"
-    with profile_path.open() as fh:
+    from src.config.profile import get_profile_path
+
+    with get_profile_path().open() as fh:
         profile = yaml.safe_load(fh)
 
     search_cfg = profile.get("search", {})
@@ -451,7 +452,9 @@ def import_linkedin(
     from src.config.settings import settings  # noqa: F401 — ensures .env loaded
     from src.importers.linkedin_importer import LinkedInImporter
 
-    profile_path = Path(__file__).parent / "config" / "profile.yaml"
+    from src.config.profile import get_profile_path
+
+    profile_path = get_profile_path()
     console.print(f"[bold]Importing[/bold] LinkedIn data from {zip_path}…")
     try:
         LinkedInImporter().import_zip(zip_path, profile_path)

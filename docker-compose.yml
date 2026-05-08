@@ -1,26 +1,51 @@
 services:
+  # --- CLI runner (one-shot commands: scan, match, apply) ---
   jobhunter:
     build: .
     container_name: jobhunter-ai
-    env_file: .env
+    env_file: ${PROFILE_DIR:-.}/.env
     volumes:
       - db_data:/data/db
       - ./data/output:/data/output
+      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
     environment:
       - DATABASE_URL=sqlite:////data/db/jobhunter.db
-    restart: unless-stopped
+      - PROFILE_PATH=/profile/profile.yaml
+    restart: "no"
     command: ["python", "-m", "src.main", "--help"]
 
+  # --- Web dashboard (FastAPI + HTMX) ---
+  jobhunter-web:
+    build: .
+    container_name: jobhunter-web
+    env_file: ${PROFILE_DIR:-.}/.env
+    volumes:
+      - db_data:/data/db
+      - ./data/output:/data/output
+      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
+      - ./static:/app/static
+      - ./templates:/app/templates
+    environment:
+      - DATABASE_URL=sqlite:////data/db/jobhunter.db
+      - PROFILE_PATH=/profile/profile.yaml
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    restart: unless-stopped
+    command: ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # --- Cron scheduler (automated daily scan + match) ---
   jobhunter-cron:
     build: .
     container_name: jobhunter-cron
-    env_file: .env
+    env_file: ${PROFILE_DIR:-.}/.env
     volumes:
       - db_data:/data/db
       - ./data/output:/data/output
+      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
       - ./cron/jobhunter-cron:/etc/cron.d/jobhunter-cron:ro
     environment:
       - DATABASE_URL=sqlite:////data/db/jobhunter.db
+      - PROFILE_PATH=/profile/profile.yaml
     restart: unless-stopped
     command: >
       sh -c "chmod 0644 /etc/cron.d/jobhunter-cron

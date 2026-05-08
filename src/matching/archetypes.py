@@ -5,7 +5,9 @@ from typing import Any
 
 import yaml
 
-_DEFAULT_PROFILE_PATH = Path(__file__).parent.parent / "config" / "profile.yaml"
+from src.config.profile import get_profile_path
+
+_DEFAULT_PROFILE_PATH = get_profile_path()
 
 
 def load_archetypes(profile_path: Path | None = None) -> dict[str, dict[str, Any]]:

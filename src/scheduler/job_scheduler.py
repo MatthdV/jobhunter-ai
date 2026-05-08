@@ -160,8 +160,9 @@ class JobScheduler:
 
     def _load_profile(self) -> dict[str, Any]:
         """Load profile.yaml for search config."""
-        profile_path = Path(__file__).parent.parent / "config" / "profile.yaml"
-        with profile_path.open() as fh:
+        from src.config.profile import get_profile_path
+
+        with get_profile_path().open() as fh:
             return yaml.safe_load(fh)
 
     async def _scan_phase(

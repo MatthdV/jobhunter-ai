@@ -14,7 +14,9 @@ from src.storage.models import Application
 
 logger = logging.getLogger(__name__)
 
-_PROFILE_PATH = Path(__file__).parent.parent / "config" / "profile.yaml"
+from src.config.profile import get_profile_path
+
+_PROFILE_PATH = get_profile_path()
 
 _CLASSIFY_SYSTEM = (
     "You are classifying a recruiter email. "

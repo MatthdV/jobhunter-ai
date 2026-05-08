@@ -80,6 +80,9 @@ class Settings(BaseSettings):
         description='Fernet key for encrypting API keys — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"',
     )
 
+    # --- Profile ---
+    profile_path: str = Field("", description="Path to profile.yaml — overrides default src/config/profile.yaml")
+
     # --- App behaviour ---
     log_level: str = Field("INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR")
     dry_run: bool = Field(True, description="If true, never actually submit applications")
