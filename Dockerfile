@@ -36,9 +36,15 @@ RUN pip install --no-cache-dir -e ".[all-llm]"
 # Install Playwright browsers
 RUN playwright install chromium --with-deps
 
+# Install optional API dependencies
+RUN pip install --no-cache-dir "fastapi>=0.115.0" "uvicorn[standard]>=0.34.0"
+
 # Copy source
 COPY src/ src/
-COPY .env.example .env.example
+COPY static/ static/
+COPY templates/ templates/
+COPY alembic/ alembic/
+COPY alembic.ini .
 
 # Create volume mount points
 RUN mkdir -p /data/db /data/output

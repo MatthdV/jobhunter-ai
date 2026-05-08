@@ -18,7 +18,9 @@ from src.storage.models import Job
 
 logger = logging.getLogger(__name__)
 
-_PROFILE_PATH = Path(__file__).parent.parent / "config" / "profile.yaml"
+from src.config.profile import get_profile_path
+
+_PROFILE_PATH = get_profile_path()
 
 _CV_SYSTEM_MESSAGE = (
     "You are a CV personalisation assistant. Given a candidate profile and a job offer, "

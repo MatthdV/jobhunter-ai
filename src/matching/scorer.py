@@ -22,7 +22,9 @@ from src.storage.models import Job, JobStatus, MatchResult
 
 logger = logging.getLogger(__name__)
 
-_PROFILE_PATH = Path(__file__).parent.parent / "config" / "profile.yaml"
+from src.config.profile import get_profile_path
+
+_PROFILE_PATH = get_profile_path()
 
 _EXPECTED_BLOCKS = frozenset(
     ["A_role_summary", "B_cv_match", "C_level_strategy",
