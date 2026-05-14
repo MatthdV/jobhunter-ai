@@ -1,29 +1,15 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-# WeasyPrint native dependencies
+# WeasyPrint dependencies (source: kozea/weasyprint official docs)
+# Playwright deps are handled by `playwright install --with-deps` below
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
-    libpangocairo-1.0-0 \
-    libcairo2 \
-    libgdk-pixbuf2.0-0 \
+    libharfbuzz0b \
+    libharfbuzz-subset0 \
     libffi-dev \
-    shared-mime-info \
-    # Playwright Chromium dependencies
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    # cron
+    libjpeg-dev \
+    libopenjp2-7-dev \
     cron \
     && rm -rf /var/lib/apt/lists/*
 

@@ -22,7 +22,7 @@ def list_jobs(
     """Return a paginated list of jobs, optionally filtered by status."""
     with get_session() as session:
         q = session.query(Job)
-        if status is not None:
+        if status:
             try:
                 status_enum = JobStatus(status)
             except ValueError:
