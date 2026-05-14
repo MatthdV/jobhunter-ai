@@ -2,10 +2,12 @@
 
 import logging
 
+import yaml
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from src.api.background import TaskStatus, tracker
 from src.api.schemas import PipelineStartResponse, PipelineStatusResponse
+from src.config.profile import get_profile_path
 from src.config.settings import settings
 from src.storage.database import get_session
 from src.storage.models import Job, JobStatus
@@ -20,46 +22,66 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
+_SOURCE_NAME_MAP = {
+    "welcome_to_the_jungle": "wttj",
+    "wttj": "wttj",
+    "indeed": "indeed",
+    "linkedin": "linkedin",
+}
+
+
+def _load_job_sources() -> list[dict]:
+    """Read job_sources from profile.yaml. Returns [] on any error."""
+    try:
+        with get_profile_path().open() as fh:
+            profile = yaml.safe_load(fh) or {}
+        return [s for s in profile.get("job_sources", []) if s.get("enabled", True)]
+    except Exception as exc:
+        logger.warning("Could not load job_sources from profile: %s", exc)
+        return []
+
+
 async def _run_scan() -> None:
     """Scan phase: launch active scrapers and persist new jobs."""
     try:
-        from src.scrapers import get_indeed_scraper  # noqa: F401 — optional import
-
-        # Build scraper list — default to wttj if nothing else configured
-        scrapers = []
-        active_sources = ["wttj"]  # extend once per-user config is wired
-
-        if "indeed" in active_sources:
-            try:
-                from src.scrapers import get_indeed_scraper
-                scrapers.append(get_indeed_scraper())
-            except Exception as exc:
-                logger.warning("Could not load Indeed scraper: %s", exc)
-
-        if "wttj" in active_sources:
-            try:
-                from src.scrapers.wttj import WTTJScraper
-                scrapers.append(WTTJScraper())
-            except Exception as exc:
-                logger.warning("Could not load WTTJ scraper: %s", exc)
-
-        if "linkedin" in active_sources:
-            try:
-                from src.scrapers.linkedin import LinkedInScraper
-                scrapers.append(LinkedInScraper())
-            except Exception as exc:
-                logger.warning("Could not load LinkedIn scraper: %s", exc)
+        job_sources = _load_job_sources()
+        if not job_sources:
+            tracker.error("scan", "No enabled job_sources in profile.yaml")
+            return
 
         with get_session() as session:
             existing_urls: set[str] = {url for (url,) in session.query(Job.url).all()}
 
         new_count = 0
-        for scraper in scrapers:
+        for source in job_sources:
+            source_key = _SOURCE_NAME_MAP.get(source.get("name", ""), "")
+            keywords = source.get("search_terms", [])
+            location = source.get("location", "")
+
+            if not source_key or not keywords:
+                logger.warning("Skipping source %r — missing name or search_terms", source.get("name"))
+                continue
+
+            scraper = None
+            try:
+                if source_key == "wttj":
+                    from src.scrapers.wttj import WTTJScraper
+                    scraper = WTTJScraper()
+                elif source_key == "indeed":
+                    from src.scrapers import get_indeed_scraper
+                    scraper = get_indeed_scraper()
+                elif source_key == "linkedin":
+                    from src.scrapers.linkedin import LinkedInScraper
+                    scraper = LinkedInScraper()
+            except Exception as exc:
+                logger.warning("Could not load scraper for %r: %s", source_key, exc)
+                continue
+
             try:
                 async with scraper:
                     jobs = await scraper.search(
-                        keywords=["automation", "RevOps"],
-                        location="remote",
+                        keywords=keywords,
+                        location=location,
                         limit=50,
                         seen_urls=existing_urls,
                     )
@@ -71,7 +93,7 @@ async def _run_scan() -> None:
                             existing_urls.add(job.url)
                     new_count += len(fresh)
             except Exception:
-                logger.exception("Scraper %r raised an error", scraper)
+                logger.exception("Scraper %r raised an error", source_key)
 
         tracker.done("scan", result={"new_jobs": new_count})
     except Exception as exc:
