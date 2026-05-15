@@ -54,8 +54,13 @@ class MCPBridgeImporter:
         self._inbox = inbox_dir or _INBOX_DIR
         self._processed = processed_dir or _PROCESSED_DIR
 
-    def import_pending(self, session: Session) -> int:
+    def import_pending(self, session: Session, user_id: int | None = None) -> int:
         """Import all pending JSON files from the inbox.
+
+        Args:
+            session: DB session for persistence.
+            user_id: If provided, imported Job objects are tagged with this user_id.
+                     Leave None for CLI/single-user mode.
 
         Returns count of new jobs imported.
         """
@@ -67,6 +72,7 @@ class MCPBridgeImporter:
             logger.debug("MCP inbox empty — nothing to import")
             return 0
 
+        self._user_id = user_id  # stash for _build_job()
         existing_urls: set[str] = {
             url for (url,) in session.query(Job.url).all()
         }
@@ -127,6 +133,7 @@ class MCPBridgeImporter:
 
     def _build_job(self, data: dict[str, Any]) -> Job:
         """Build a Job instance from MCP bridge job data."""
+        user_id = getattr(self, "_user_id", None)
         return Job(
             title=data.get("title", "Unknown"),
             url=data["url"],
@@ -140,6 +147,7 @@ class MCPBridgeImporter:
             or "télétravail" in (data.get("location") or "").lower(),
             status=JobStatus.NEW,
             scraped_at=datetime.now(UTC),
+            user_id=user_id,
         )
 
     def _enrich_company(

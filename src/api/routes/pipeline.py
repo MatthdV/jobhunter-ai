@@ -1,20 +1,27 @@
 """Pipeline phase trigger routes."""
 
 import logging
+from pathlib import Path
 
-import yaml
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
-from src.api.background import TaskStatus, tracker
+from src.api.background import tracker
+from src.api.deps import get_current_user
 from src.api.schemas import PipelineStartResponse, PipelineStatusResponse
-from src.config.profile import get_profile_path
+from src.api.user_settings import get_settings_for_user
+from src.config.profile import get_profile_for_user
 from src.config.settings import settings
 from src.storage.database import get_session
-from src.storage.models import Job, JobStatus
+from src.storage.models import Job, JobStatus, User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_TEMPLATES_DIR = Path(__file__).parent.parent.parent.parent / "templates"
+_templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
 # ---------------------------------------------------------------------------
@@ -30,27 +37,42 @@ _SOURCE_NAME_MAP = {
 }
 
 
-def _load_job_sources() -> list[dict]:
-    """Read job_sources from profile.yaml. Returns [] on any error."""
+def _load_job_sources_for_user(user: User) -> list[dict]:
+    """Read job_sources from the user's profile. Returns [] on any error."""
     try:
-        with get_profile_path().open() as fh:
-            profile = yaml.safe_load(fh) or {}
+        profile = get_profile_for_user(user)
         return [s for s in profile.get("job_sources", []) if s.get("enabled", True)]
     except Exception as exc:
-        logger.warning("Could not load job_sources from profile: %s", exc)
+        logger.warning("Could not load job_sources for user %d: %s", user.id, exc)
         return []
 
 
-async def _run_scan() -> None:
-    """Scan phase: launch active scrapers and persist new jobs."""
+def _load_user(user_id: int) -> User | None:
+    """Load a User from DB by id — used at start of background tasks."""
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if user is not None:
+            session.expunge(user)
+        return user
+
+
+async def _run_scan(user_id: int) -> None:
+    """Scan phase: launch active scrapers and persist new jobs for *user_id*."""
     try:
-        job_sources = _load_job_sources()
+        user = _load_user(user_id)
+        if user is None:
+            tracker.error("scan", f"User {user_id} not found", user_id=user_id)
+            return
+
+        job_sources = _load_job_sources_for_user(user)
         if not job_sources:
-            tracker.error("scan", "No enabled job_sources in profile.yaml")
+            tracker.error("scan", "No enabled job_sources in profile", user_id=user_id)
             return
 
         with get_session() as session:
-            existing_urls: set[str] = {url for (url,) in session.query(Job.url).all()}
+            existing_urls: set[str] = {
+                url for (url,) in session.query(Job.url).filter(Job.user_id == user_id).all()
+            }
 
         new_count = 0
         for source in job_sources:
@@ -59,20 +81,23 @@ async def _run_scan() -> None:
             location = source.get("location", "")
 
             if not source_key or not keywords:
-                logger.warning("Skipping source %r — missing name or search_terms", source.get("name"))
+                logger.warning(
+                    "Skipping source %r — missing name or search_terms",
+                    source.get("name"),
+                )
                 continue
 
             scraper = None
             try:
                 if source_key == "wttj":
                     from src.scrapers.wttj import WTTJScraper
-                    scraper = WTTJScraper()
+                    scraper = WTTJScraper(user_id=user_id)
                 elif source_key == "indeed":
                     from src.scrapers import get_indeed_scraper
-                    scraper = get_indeed_scraper()
+                    scraper = get_indeed_scraper(user_id=user_id)
                 elif source_key == "linkedin":
                     from src.scrapers.linkedin import LinkedInScraper
-                    scraper = LinkedInScraper()
+                    scraper = LinkedInScraper(user_id=user_id)
             except Exception as exc:
                 logger.warning("Could not load scraper for %r: %s", source_key, exc)
                 continue
@@ -89,64 +114,106 @@ async def _run_scan() -> None:
                 if fresh:
                     with get_session() as session:
                         for job in fresh:
+                            job.user_id = user_id  # type: ignore[assignment]
                             session.add(job)
                             existing_urls.add(job.url)
                     new_count += len(fresh)
             except Exception:
                 logger.exception("Scraper %r raised an error", source_key)
 
-        tracker.done("scan", result={"new_jobs": new_count})
+        tracker.done("scan", user_id=user_id, result={"new_jobs": new_count})
     except Exception as exc:
-        logger.exception("Scan phase failed")
-        tracker.error("scan", str(exc))
+        logger.exception("Scan phase failed for user %d", user_id)
+        tracker.error("scan", str(exc), user_id=user_id)
 
 
-async def _run_match() -> None:
-    """Match phase: score all NEW jobs with AI."""
+async def _run_match(user_id: int) -> None:
+    """Match phase: score all NEW jobs for *user_id* with AI."""
     try:
-        if not settings.is_ai_configured:
-            tracker.error("match", "AI provider not configured — set the appropriate API key")
+        user = _load_user(user_id)
+        if user is None:
+            tracker.error("match", f"User {user_id} not found", user_id=user_id)
+            return
+
+        user_cfg = get_settings_for_user(user)
+        # Check AI configured for this user
+        provider = user_cfg.get("llm_provider", settings.llm_provider)
+        key_map = {
+            "anthropic": user_cfg.get("anthropic_api_key", ""),
+            "openai": user_cfg.get("openai_api_key", ""),
+            "mistral": user_cfg.get("mistral_api_key", ""),
+            "deepseek": user_cfg.get("deepseek_api_key", ""),
+            "openrouter": user_cfg.get("openrouter_api_key", ""),
+        }
+        if not key_map.get(provider, ""):
+            tracker.error(
+                "match",
+                "AI provider not configured — set the appropriate API key",
+                user_id=user_id,
+            )
             return
 
         from src.matching.scorer import Scorer
 
         scorer = Scorer()
 
-        # Load IDs first, close session, then score async (avoids holding sync
-        # session open across await points inside score_batch)
         with get_session() as session:
             new_job_ids = [
-                j.id for j in session.query(Job).filter(Job.status == JobStatus.NEW).all()
+                j.id
+                for j in session.query(Job)
+                .filter(Job.status == JobStatus.NEW, Job.user_id == user_id)
+                .all()
             ]
 
         if not new_job_ids:
-            tracker.done("match", result={"matched": 0, "message": "No new jobs to score"})
+            tracker.done(
+                "match",
+                user_id=user_id,
+                result={"matched": 0, "message": "No new jobs to score"},
+            )
             return
 
-        # Re-open session for scoring (score_batch modifies job.status in-place)
         with get_session() as session:
             new_jobs = session.query(Job).filter(Job.id.in_(new_job_ids)).all()
             await scorer.score_batch(new_jobs, session)
 
         with get_session() as session:
             matched_count = (
-                session.query(Job).filter(Job.status == JobStatus.MATCHED).count()
+                session.query(Job)
+                .filter(Job.status == JobStatus.MATCHED, Job.user_id == user_id)
+                .count()
             )
 
-        tracker.done("match", result={"matched": matched_count})
+        tracker.done("match", user_id=user_id, result={"matched": matched_count})
     except Exception as exc:
-        logger.exception("Match phase failed")
-        tracker.error("match", str(exc))
+        logger.exception("Match phase failed for user %d", user_id)
+        tracker.error("match", str(exc), user_id=user_id)
 
 
-async def _run_apply(dry_run: bool = True) -> None:
-    """Apply phase: generate CV + cover letter drafts for MATCHED jobs."""
+async def _run_apply(user_id: int, dry_run: bool = True) -> None:
+    """Apply phase: generate CV + cover letter drafts for MATCHED jobs of *user_id*."""
     try:
-        if not settings.is_ai_configured:
-            tracker.error("apply", "AI provider not configured — set the appropriate API key")
+        user = _load_user(user_id)
+        if user is None:
+            tracker.error("apply", f"User {user_id} not found", user_id=user_id)
             return
 
-        from pathlib import Path
+        user_cfg = get_settings_for_user(user)
+        provider = user_cfg.get("llm_provider", settings.llm_provider)
+        key_map = {
+            "anthropic": user_cfg.get("anthropic_api_key", ""),
+            "openai": user_cfg.get("openai_api_key", ""),
+            "mistral": user_cfg.get("mistral_api_key", ""),
+            "deepseek": user_cfg.get("deepseek_api_key", ""),
+            "openrouter": user_cfg.get("openrouter_api_key", ""),
+        }
+        if not key_map.get(provider, ""):
+            tracker.error(
+                "apply",
+                "AI provider not configured — set the appropriate API key",
+                user_id=user_id,
+            )
+            return
 
         from src.generators.cover_letter import CoverLetterGenerator
         from src.generators.cv_generator import CVGenerator
@@ -160,19 +227,17 @@ async def _run_apply(dry_run: bool = True) -> None:
         with get_session() as session:
             matched_jobs = (
                 session.query(Job)
-                .filter(Job.status == JobStatus.MATCHED)
+                .filter(Job.status == JobStatus.MATCHED, Job.user_id == user_id)
                 .all()
             )
             eligible_ids = [j.id for j in matched_jobs if j.application is None]
 
         created_count = 0
         for job_id in eligible_ids:
-            # Extract scalar data inside session — avoid DetachedInstanceError
             with get_session() as session:
                 job = session.get(Job, job_id)
                 if job is None:
                     continue
-                # Eagerly read all attributes the generators need
                 job_snapshot = {
                     "id": job.id,
                     "title": job.title,
@@ -188,6 +253,7 @@ async def _run_apply(dry_run: bool = True) -> None:
             with get_session() as session:
                 app = Application(
                     job_id=job_id,
+                    user_id=user_id,
                     cv_path=str(cv_path),
                     cover_letter=letter,
                     status=ApplicationStatus.DRAFT,
@@ -195,17 +261,32 @@ async def _run_apply(dry_run: bool = True) -> None:
                 session.add(app)
             created_count += 1
 
-        tracker.done("apply", result={"drafts_created": created_count, "dry_run": dry_run})
+        tracker.done("apply", user_id=user_id, result={"drafts_created": created_count, "dry_run": dry_run})
     except Exception as exc:
-        logger.exception("Apply phase failed")
-        tracker.error("apply", str(exc))
+        logger.exception("Apply phase failed for user %d", user_id)
+        tracker.error("apply", str(exc), user_id=user_id)
 
 
-async def _run_respond() -> None:
-    """Respond phase: check Gmail for recruiter replies."""
+async def _run_respond(user_id: int) -> None:
+    """Respond phase: check Gmail for recruiter replies for *user_id*."""
     try:
-        if not settings.is_gmail_configured:
-            tracker.error("respond", "Gmail not configured — set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN")
+        user = _load_user(user_id)
+        if user is None:
+            tracker.error("respond", f"User {user_id} not found", user_id=user_id)
+            return
+
+        user_cfg = get_settings_for_user(user)
+        gmail_configured = bool(
+            user_cfg.get("gmail_client_id")
+            and user_cfg.get("gmail_client_secret")
+            and user_cfg.get("gmail_refresh_token")
+        )
+        if not gmail_configured:
+            tracker.error(
+                "respond",
+                "Gmail not configured — set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN",
+                user_id=user_id,
+            )
             return
 
         from src.communications.email_handler import EmailHandler
@@ -221,18 +302,21 @@ async def _run_respond() -> None:
                 .filter(
                     Application.status == ApplicationStatus.SUBMITTED,
                     Application.gmail_thread_id.isnot(None),
+                    Application.user_id == user_id,
                 )
                 .all()
             )
             thread_ids = [a.gmail_thread_id for a in submitted_apps if a.gmail_thread_id]
             app_by_thread = {
-                a.gmail_thread_id: a.id
-                for a in submitted_apps
-                if a.gmail_thread_id
+                a.gmail_thread_id: a.id for a in submitted_apps if a.gmail_thread_id
             }
 
         if not thread_ids:
-            tracker.done("respond", result={"handled": 0, "message": "No submitted applications with Gmail threads"})
+            tracker.done(
+                "respond",
+                user_id=user_id,
+                result={"handled": 0, "message": "No submitted applications with Gmail threads"},
+            )
             return
 
         replies = await email_handler.get_unread_replies(thread_ids)
@@ -252,10 +336,10 @@ async def _run_respond() -> None:
             await email_handler.mark_as_read(msg.message_id)
             handled += 1
 
-        tracker.done("respond", result={"handled": handled})
+        tracker.done("respond", user_id=user_id, result={"handled": handled})
     except Exception as exc:
-        logger.exception("Respond phase failed")
-        tracker.error("respond", str(exc))
+        logger.exception("Respond phase failed for user %d", user_id)
+        tracker.error("respond", str(exc), user_id=user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -263,12 +347,13 @@ async def _run_respond() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _start_phase(name: str) -> None:
-    """Raise 409 if phase is already running."""
-    if tracker.is_running(name):
+async def _atomic_start(phase: str, user_id: int) -> None:
+    """Atomically check-and-set RUNNING; raise 409 if already running."""
+    started = await tracker.try_start(phase, user_id=user_id)
+    if not started:
         raise HTTPException(
             status_code=409,
-            detail=f"Phase '{name}' is already running. Wait for it to complete.",
+            detail=f"Phase '{phase}' is already running. Wait for it to complete.",
         )
 
 
@@ -278,11 +363,13 @@ def _start_phase(name: str) -> None:
 
 
 @router.post("/scan", response_model=PipelineStartResponse)
-async def trigger_scan(background_tasks: BackgroundTasks) -> PipelineStartResponse:
+async def trigger_scan(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+) -> PipelineStartResponse:
     """Launch the scan phase in the background."""
-    _start_phase("scan")
-    tracker.start("scan")  # mark RUNNING before scheduling — closes the 409 race window
-    background_tasks.add_task(_run_scan)
+    await _atomic_start("scan", current_user.id)
+    background_tasks.add_task(_run_scan, current_user.id)
     return PipelineStartResponse(
         status="started",
         phase="scan",
@@ -291,16 +378,23 @@ async def trigger_scan(background_tasks: BackgroundTasks) -> PipelineStartRespon
 
 
 @router.post("/match", response_model=PipelineStartResponse)
-async def trigger_match(background_tasks: BackgroundTasks) -> PipelineStartResponse:
+async def trigger_match(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+) -> PipelineStartResponse:
     """Launch the match (AI scoring) phase in the background."""
-    _start_phase("match")
-    if not settings.is_ai_configured:
+    user_cfg = get_settings_for_user(current_user)
+    if not any(
+        user_cfg.get(k)
+        for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
+                  "deepseek_api_key", "openrouter_api_key")
+    ):
         raise HTTPException(
             status_code=400,
-            detail="AI provider not configured. Set the appropriate API key in .env.",
+            detail="AI provider API key not configured. Set it in credentials or .env.",
         )
-    tracker.start("match")
-    background_tasks.add_task(_run_match)
+    await _atomic_start("match", current_user.id)
+    background_tasks.add_task(_run_match, current_user.id)
     return PipelineStartResponse(
         status="started",
         phase="match",
@@ -311,17 +405,22 @@ async def trigger_match(background_tasks: BackgroundTasks) -> PipelineStartRespo
 @router.post("/apply", response_model=PipelineStartResponse)
 async def trigger_apply(
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     dry_run: bool = Query(True, description="When false, submits applications live"),
 ) -> PipelineStartResponse:
     """Launch the apply (CV generation) phase in the background."""
-    _start_phase("apply")
-    if not settings.is_ai_configured:
+    user_cfg = get_settings_for_user(current_user)
+    if not any(
+        user_cfg.get(k)
+        for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
+                  "deepseek_api_key", "openrouter_api_key")
+    ):
         raise HTTPException(
             status_code=400,
-            detail="AI provider not configured. Set the appropriate API key in .env.",
+            detail="AI provider API key not configured. Set it in credentials or .env.",
         )
-    tracker.start("apply")
-    background_tasks.add_task(_run_apply, dry_run)
+    await _atomic_start("apply", current_user.id)
+    background_tasks.add_task(_run_apply, current_user.id, dry_run)
     return PipelineStartResponse(
         status="started",
         phase="apply",
@@ -330,16 +429,23 @@ async def trigger_apply(
 
 
 @router.post("/respond", response_model=PipelineStartResponse)
-async def trigger_respond(background_tasks: BackgroundTasks) -> PipelineStartResponse:
+async def trigger_respond(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+) -> PipelineStartResponse:
     """Launch the respond (Gmail reply check) phase in the background."""
-    _start_phase("respond")
-    if not settings.is_gmail_configured:
+    user_cfg = get_settings_for_user(current_user)
+    if not (
+        user_cfg.get("gmail_client_id")
+        and user_cfg.get("gmail_client_secret")
+        and user_cfg.get("gmail_refresh_token")
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Gmail not configured. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN in .env.",
+            detail="Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token.",
         )
-    tracker.start("respond")
-    background_tasks.add_task(_run_respond)
+    await _atomic_start("respond", current_user.id)
+    background_tasks.add_task(_run_respond, current_user.id)
     return PipelineStartResponse(
         status="started",
         phase="respond",
@@ -348,6 +454,26 @@ async def trigger_respond(background_tasks: BackgroundTasks) -> PipelineStartRes
 
 
 @router.get("/status", response_model=PipelineStatusResponse)
-def pipeline_status() -> PipelineStatusResponse:
-    """Return current state of all pipeline phases."""
-    return PipelineStatusResponse(phases=tracker.all())
+def pipeline_status(
+    current_user: User = Depends(get_current_user),
+) -> PipelineStatusResponse:
+    """Return current state of all pipeline phases for the authenticated user."""
+    return PipelineStatusResponse(phases=tracker.all(user_id=current_user.id))
+
+
+@router.get("/status-partial", response_class=HTMLResponse)
+def pipeline_status_partial(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> HTMLResponse:
+    """Return pipeline controls HTML for HTMX polling.
+
+    Polled every 3s by #pipeline-status via hx-trigger="every 3s".
+    Returns the inner HTML only — the outer div's polling attributes
+    are preserved by hx-swap="innerHTML".
+    """
+    return _templates.TemplateResponse(
+        request,
+        "partials/pipeline_controls.html",
+        {"pipeline_status": tracker.all(user_id=current_user.id)},
+    )

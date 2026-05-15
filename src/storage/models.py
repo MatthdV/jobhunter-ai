@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models for JobHunter AI."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -67,8 +67,8 @@ class User(Base):
     max_apps_per_day = Column(Integer, default=10)
     active_sources = Column(String(200), default="wttj")   # comma-separated
     dry_run = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
@@ -97,7 +97,7 @@ class Company(Base):
     growth_signals = Column(Text, nullable=True)        # JSON array
     red_flags = Column(Text, nullable=True)             # JSON array
     researched_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
     jobs = relationship("Job", back_populates="company", cascade="all, delete-orphan")
@@ -131,7 +131,7 @@ class Job(Base):
     salary_normalized_min = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
     salary_normalized_max = Column(Integer, nullable=True)   # PPP-adjusted EUR/year
     status: Column[str] = Column(SAEnum(JobStatus), default=JobStatus.NEW, nullable=False)
-    scraped_at = Column(DateTime, default=datetime.utcnow)
+    scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = relationship("Company", back_populates="jobs")
     user = relationship("User", back_populates="jobs")
@@ -158,8 +158,8 @@ class Application(Base):
     recruiter_id = Column(Integer, ForeignKey("recruiters.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)  # For tracking replies
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     job = relationship("Job", back_populates="application")
     user = relationship("User", back_populates="applications")
@@ -180,7 +180,7 @@ class Recruiter(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = relationship("Company", back_populates="recruiters")
     applications = relationship("Application", back_populates="recruiter")
@@ -202,7 +202,7 @@ class MatchResult(Base):
     model_used = Column(String(100), nullable=False)
     evaluation_json = Column(Text, nullable=True)      # Full A-F block evaluation JSON
     archetype = Column(String(50), nullable=True)       # Detected archetype key
-    scored_at = Column(DateTime, default=datetime.utcnow)
+    scored_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     job = relationship("Job", back_populates="match_result")
 

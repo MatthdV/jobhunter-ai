@@ -38,45 +38,12 @@
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
     <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Contrôles pipeline</h2>
 
-    <!-- Pipeline status polling (updates every 3s) -->
-    <div id="pipeline-status">
-      <!-- Rendered by the server on first load, then auto-polled -->
-      {% include "partials/pipeline_controls.html" ignore missing %}
-
-      <!-- Fallback if partial not available yet -->
-      {% if not pipeline_status %}
-      <div class="flex flex-wrap gap-3">
-        {% set phases = [
-          ("scan",    "🔍 Scanner",         "/api/pipeline/scan",             ""),
-          ("match",   "⭐ Matcher",          "/api/pipeline/match",            ""),
-          ("apply",   "📤 Appliquer (dry)",  "/api/pipeline/apply?dry_run=true",""),
-          ("respond", "💬 Répondre",         "/api/pipeline/respond",          ""),
-        ] %}
-        {% for phase_key, label, endpoint, extra in phases %}
-        {% set phase_st = stats.pipeline_status.get(phase_key, "idle") if stats and stats.pipeline_status else "idle" %}
-        <button
-          {% if phase_st == "running" %}disabled{% endif %}
-          hx-post="{{ endpoint }}"
-          hx-target="#pipeline-status"
-          hx-swap="outerHTML"
-          class="pipeline-btn flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold border transition-all
-                 {% if phase_st == 'running' %}
-                   bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed
-                 {% elif phase_st == 'done' %}
-                   bg-green-50 text-green-700 border-green-200 hover:bg-green-100
-                 {% else %}
-                   bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700
-                 {% endif %}">
-          {% if phase_st == "running" %}
-          <span class="spinner"></span>
-          {% endif %}
-          {{ label }}
-          {% if phase_st == "running" %}<span class="text-xs font-normal">en cours…</span>{% endif %}
-          {% if phase_st == "done" %}<span class="text-green-500 text-xs">✓</span>{% endif %}
-        </button>
-        {% endfor %}
-      </div>
-      {% endif %}
+    <!-- Pipeline status — polled every 3s via HTMX (innerHTML swap keeps outer div attrs) -->
+    <div id="pipeline-status"
+         hx-get="/api/pipeline/status-partial"
+         hx-trigger="every 3s"
+         hx-swap="innerHTML">
+      {% include "partials/pipeline_controls.html" %}
     </div>
   </div>
 
@@ -95,6 +62,7 @@
           ("replied", "REPLIED"),
         ] %}
         {% for val, label in filters %}
+        {% set count = status_counts.get(val, 0) if status_counts else 0 %}
         <button
           hx-get="/api/jobs?status={{ val if val != 'all' else '' }}&limit=50&offset=0"
           hx-target="#jobs-table"
@@ -106,7 +74,7 @@
                  {% else %}
                    bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600
                  {% endif %}">
-          {{ label }}
+          {{ label }}{% if count > 0 %} <span class="opacity-70">({{ count }})</span>{% endif %}
         </button>
         {% endfor %}
       </div>
@@ -191,10 +159,35 @@
               {{ job.scraped_at[:10] if job.scraped_at else "—" }}
             </td>
             <td class="px-4 py-3">
-              <a href="/jobs/{{ job.id }}"
-                 class="text-indigo-600 hover:text-indigo-800 text-xs font-semibold whitespace-nowrap transition-colors">
-                Voir →
-              </a>
+              <div class="flex items-center gap-2 whitespace-nowrap">
+                <a href="/jobs/{{ job.id }}"
+                   class="text-indigo-600 hover:text-indigo-800 text-xs font-semibold transition-colors">
+                  Voir →
+                </a>
+                {% if job.status in ("new", "matched") %}
+                <button
+                  hx-post="/jobs/{{ job.id }}/status"
+                  hx-vals='{"status": "skipped"}'
+                  hx-target="closest tr"
+                  hx-swap="outerHTML"
+                  hx-confirm="Passer cette offre ?"
+                  class="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
+                  title="Passer">
+                  ✕
+                </button>
+                {% endif %}
+                {% if job.status == "new" %}
+                <button
+                  hx-post="/jobs/{{ job.id }}/status"
+                  hx-vals='{"status": "matched"}'
+                  hx-target="closest tr"
+                  hx-swap="outerHTML"
+                  class="text-xs text-gray-400 hover:text-green-600 transition-colors font-medium"
+                  title="Approuver manuellement">
+                  ✓
+                </button>
+                {% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}

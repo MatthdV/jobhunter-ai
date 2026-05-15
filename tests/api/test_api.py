@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.api.app import app
 from src.api.background import TaskStatus, tracker
+from src.api.deps import get_current_user, require_user_redirect
 from src.storage import database as _db_module
 from src.storage.database import configure, drop_all, get_session, init_db
 from src.storage.models import (
@@ -27,12 +28,16 @@ from src.storage.models import (
     Job,
     JobStatus,
     Recruiter,
+    User,
 )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+_TEST_USER_ID = 1
 
 
 @pytest.fixture(autouse=True)
@@ -58,6 +63,12 @@ def setup_db():
     # Create tables on our engine
     Base.metadata.create_all(bind=engine)
 
+    # Create a test user so auth deps can return it
+    with session_factory() as s:
+        test_user = User(email="test@example.com", hashed_password="x")
+        s.add(test_user)
+        s.commit()
+
     # Reset the singleton tracker so pipeline state doesn't bleed between tests
     tracker._tasks.clear()
 
@@ -72,7 +83,19 @@ def setup_db():
 
 @pytest.fixture()
 def client(setup_db):  # explicit dependency ensures setup_db runs first
-    return TestClient(app)
+    """TestClient with auth deps overridden to bypass JWT cookie requirement."""
+    _test_user = User(id=_TEST_USER_ID, email="test@example.com", hashed_password="x")
+
+    def _fake_user():
+        return _test_user
+
+    app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[require_user_redirect] = _fake_user
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_user_redirect, None)
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +113,7 @@ def _make_job(
     company: Company | None = None,
     salary_min: int | None = None,
     salary_max: int | None = None,
+    user_id: int | None = _TEST_USER_ID,
 ) -> Job:
     return Job(
         title=title,
@@ -101,6 +125,7 @@ def _make_job(
         company=company,
         salary_min=salary_min,
         salary_max=salary_max,
+        user_id=user_id,
     )
 
 
@@ -112,6 +137,7 @@ def _make_application(
     job: Job,
     status: ApplicationStatus = ApplicationStatus.DRAFT,
     submitted_at: datetime | None = None,
+    user_id: int | None = _TEST_USER_ID,
 ) -> Application:
     return Application(
         job=job,
@@ -119,6 +145,7 @@ def _make_application(
         submitted_at=submitted_at,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
+        user_id=user_id,
     )
 
 
@@ -176,9 +203,11 @@ class TestStats:
             session.add(j2)
             session.flush()
             session.add(Application(job_id=j1.id, status=ApplicationStatus.SUBMITTED,
-                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+                                    user_id=_TEST_USER_ID))
             session.add(Application(job_id=j2.id, status=ApplicationStatus.DRAFT,
-                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+                                    user_id=_TEST_USER_ID))
         resp = client.get("/api/stats")
         assert resp.json()["total"]["applied"] == 1
 
@@ -194,7 +223,8 @@ class TestStats:
                 session.add(j)
                 session.flush()
                 session.add(Application(job_id=j.id, status=st,
-                                        created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+                                        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+                                        user_id=_TEST_USER_ID))
         resp = client.get("/api/stats")
         assert resp.json()["total"]["replied"] == 3
 
@@ -208,7 +238,7 @@ class TestStats:
         assert phases["respond"]["status"] == "idle"
 
     def test_pipeline_status_reflects_tracker_state(self, client: TestClient):
-        tracker.start("scan")
+        tracker.start("scan", user_id=_TEST_USER_ID)
         resp = client.get("/api/stats")
         assert resp.json()["pipeline_status"]["scan"]["status"] == "running"
 
@@ -326,7 +356,8 @@ class TestJobsList:
             session.add(j)
             session.flush()
             session.add(Application(job_id=j.id, status=ApplicationStatus.DRAFT,
-                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+                                    user_id=_TEST_USER_ID))
         resp = client.get("/api/jobs")
         app_data = resp.json()["items"][0]["application"]
         assert app_data is not None
@@ -402,7 +433,8 @@ class TestJobDetail:
             session.add(j)
             session.flush()
             session.add(Application(job_id=j.id, status=ApplicationStatus.PENDING_VALIDATION,
-                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+                                    created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+                                    user_id=_TEST_USER_ID))
             job_id = j.id
 
         resp = client.get(f"/api/jobs/{job_id}")
@@ -516,7 +548,7 @@ class TestPipelineScan:
         assert data["phase"] == "scan"
 
     def test_second_scan_while_running_returns_409(self, client: TestClient):
-        tracker.start("scan")  # Manually mark as running
+        tracker.start("scan", user_id=_TEST_USER_ID)  # Manually mark as running
         resp = client.post("/api/pipeline/scan")
         assert resp.status_code == 409
 
@@ -543,17 +575,21 @@ class TestPipelineScan:
 class TestPipelineMatch:
     def test_match_returns_400_when_no_api_key(self, client: TestClient):
         from src.config.settings import settings
-        original = settings.anthropic_api_key
-        settings.anthropic_api_key = ""
+        _ai_keys = ("anthropic_api_key", "openai_api_key", "mistral_api_key",
+                    "deepseek_api_key", "openrouter_api_key")
+        originals = {k: getattr(settings, k) for k in _ai_keys}
+        for k in _ai_keys:
+            setattr(settings, k, "")
         try:
             resp = client.post("/api/pipeline/match")
             assert resp.status_code == 400
             assert "AI provider" in resp.json()["detail"]
         finally:
-            settings.anthropic_api_key = original
+            for k, v in originals.items():
+                setattr(settings, k, v)
 
     def test_match_409_when_already_running(self, client: TestClient):
-        tracker.start("match")
+        tracker.start("match", user_id=_TEST_USER_ID)
         resp = client.post("/api/pipeline/match")
         assert resp.status_code == 409
 
@@ -573,13 +609,17 @@ class TestPipelineMatch:
 class TestPipelineApply:
     def test_apply_returns_400_when_no_api_key(self, client: TestClient):
         from src.config.settings import settings
-        original = settings.anthropic_api_key
-        settings.anthropic_api_key = ""
+        _ai_keys = ("anthropic_api_key", "openai_api_key", "mistral_api_key",
+                    "deepseek_api_key", "openrouter_api_key")
+        originals = {k: getattr(settings, k) for k in _ai_keys}
+        for k in _ai_keys:
+            setattr(settings, k, "")
         try:
             resp = client.post("/api/pipeline/apply")
             assert resp.status_code == 400
         finally:
-            settings.anthropic_api_key = original
+            for k, v in originals.items():
+                setattr(settings, k, v)
 
     def test_apply_dry_run_true_by_default(self, client: TestClient):
         from unittest.mock import AsyncMock
@@ -606,7 +646,7 @@ class TestPipelineApply:
             settings.anthropic_api_key = ""
 
     def test_apply_409_when_already_running(self, client: TestClient):
-        tracker.start("apply")
+        tracker.start("apply", user_id=_TEST_USER_ID)
         resp = client.post("/api/pipeline/apply")
         assert resp.status_code == 409
 
@@ -630,7 +670,7 @@ class TestPipelineRespond:
             settings.gmail_refresh_token = orig_token
 
     def test_respond_409_when_already_running(self, client: TestClient):
-        tracker.start("respond")
+        tracker.start("respond", user_id=_TEST_USER_ID)
         resp = client.post("/api/pipeline/respond")
         assert resp.status_code == 409
 
@@ -649,19 +689,19 @@ class TestPipelineStatus:
             assert phases[phase]["status"] == "idle"
 
     def test_status_reflects_running_phase(self, client: TestClient):
-        tracker.start("apply")
+        tracker.start("apply", user_id=_TEST_USER_ID)
         resp = client.get("/api/pipeline/status")
         assert resp.json()["phases"]["apply"]["status"] == "running"
 
     def test_status_reflects_done_phase(self, client: TestClient):
-        tracker.done("scan", result={"new_jobs": 5})
+        tracker.done("scan", user_id=_TEST_USER_ID, result={"new_jobs": 5})
         resp = client.get("/api/pipeline/status")
         phases = resp.json()["phases"]
         assert phases["scan"]["status"] == "done"
         assert phases["scan"]["result"]["new_jobs"] == 5
 
     def test_status_reflects_error_phase(self, client: TestClient):
-        tracker.error("match", "something went wrong")
+        tracker.error("match", "something went wrong", user_id=_TEST_USER_ID)
         resp = client.get("/api/pipeline/status")
         phases = resp.json()["phases"]
         assert phases["match"]["status"] == "error"
@@ -763,12 +803,12 @@ class TestPageRoutes:
 class TestConcurrentPipeline:
     def test_second_scan_while_first_running_gets_409(self, client: TestClient):
         """Two rapid POSTs to /api/pipeline/scan — second should get 409."""
-        tracker.start("scan")  # Simulate a running task
+        tracker.start("scan", user_id=_TEST_USER_ID)  # Simulate a running task
         resp = client.post("/api/pipeline/scan")
         assert resp.status_code == 409
 
     def test_409_detail_mentions_phase(self, client: TestClient):
-        tracker.start("match")
+        tracker.start("match", user_id=_TEST_USER_ID)
         resp = client.post("/api/pipeline/match")
         assert resp.status_code == 409
         assert "match" in resp.json()["detail"]

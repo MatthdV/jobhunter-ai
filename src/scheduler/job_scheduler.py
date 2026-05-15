@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from datetime import time as _time
 from pathlib import Path
 from typing import Any
@@ -438,7 +438,7 @@ class JobScheduler:
                                 continue
 
                     fresh_app.status = ApplicationStatus.SUBMITTED  # type: ignore[assignment]
-                    fresh_app.submitted_at = datetime.utcnow()  # type: ignore[assignment]
+                    fresh_app.submitted_at = datetime.now(timezone.utc)  # type: ignore[assignment]
                     fresh_app.gmail_thread_id = gmail_thread_id  # type: ignore[assignment]
                     fresh_job.status = JobStatus.APPLIED  # type: ignore[assignment]
                     submitted_count += 1
