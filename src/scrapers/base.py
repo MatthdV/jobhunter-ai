@@ -39,8 +39,9 @@ class BaseScraper(ABC):
     MAX_DELAY: float = 2.5
     MAX_RPH: int = 120
 
-    def __init__(self, headless: bool = True) -> None:
+    def __init__(self, headless: bool = True, user_id: int | None = None) -> None:
         self.headless = headless
+        self._user_id = user_id  # Set on every Job created by this scraper
         self._token_bucket = _TokenBucket(capacity=self.MAX_RPH, rate=self.MAX_RPH / 3600)
 
     # ------------------------------------------------------------------
@@ -88,6 +89,9 @@ class BaseScraper(ABC):
             job.country_code = country_code  # type: ignore[assignment]
             if config:
                 job.salary_currency = config.currency  # type: ignore[assignment]
+            # Set user_id — populated when scraper instantiated via web pipeline
+            if self._user_id is not None:
+                job.user_id = self._user_id  # type: ignore[assignment]
             if job.url in db_seen or job.url in batch_seen:
                 continue
             batch_seen.add(job.url)  # type: ignore[arg-type]

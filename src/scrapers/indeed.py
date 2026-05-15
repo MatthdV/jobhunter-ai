@@ -39,8 +39,8 @@ class IndeedScraper(BaseScraper):
     MAX_DELAY = 4.0
     MAX_RPH = 60
 
-    def __init__(self, headless: bool = True) -> None:
-        super().__init__(headless=headless)
+    def __init__(self, headless: bool = True, user_id: int | None = None) -> None:
+        super().__init__(headless=headless, user_id=user_id)
         self._browser: Browser | None = None
         self._playwright_ctx: Any = None
 

@@ -47,8 +47,8 @@ class IndeedApiScraper(BaseScraper):
     MAX_DELAY = 2.5
     MAX_RPH = 60
 
-    def __init__(self, headless: bool = True, api_key: str = "") -> None:
-        super().__init__(headless=headless)
+    def __init__(self, headless: bool = True, api_key: str = "", user_id: int | None = None) -> None:
+        super().__init__(headless=headless, user_id=user_id)
         resolved_key = api_key or settings.indeed_api_key
         if not resolved_key:
             raise ConfigurationError(

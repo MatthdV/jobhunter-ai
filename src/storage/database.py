@@ -1,13 +1,16 @@
 """Database engine, session factory, and helpers."""
 
+import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config.settings import settings
 from src.storage.models import Base
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Engine factory — call configure() to swap URL (e.g. in tests)
@@ -23,13 +26,29 @@ _SessionLocal: sessionmaker[Session] | None = None
 
 def _make_engine(url: str) -> Engine:
     connect_args: dict[str, bool] = {}
-    if url.startswith("sqlite"):
+    is_sqlite = url.startswith("sqlite")
+    if is_sqlite:
         connect_args = {"check_same_thread": False}
-    return create_engine(
+    engine = create_engine(
         url,
         connect_args=connect_args,
         echo=(settings.log_level == "DEBUG"),
     )
+    if is_sqlite:
+        # Enable WAL mode on every new connection.
+        # WAL prevents the write-exclusive lock that caused past corruption
+        # (jobhunter.db.corrupt, 900KB backup). With WAL, readers never block
+        # writers and a crash leaves the -wal file recoverable.
+        # synchronous=NORMAL is safe with WAL and avoids fsync on every txn.
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, _connection_record):  # type: ignore[misc]
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+    return engine
 
 
 def configure(database_url: str | None = None) -> None:
