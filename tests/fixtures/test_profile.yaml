@@ -47,3 +47,48 @@ projects:
     name: Test Project
     description: "A test automation project"
     url: null
+
+job_sources:
+  - name: wttj
+    enabled: true
+    search_terms: [automation, python]
+    location: Paris
+    countries: [FR]
+
+archetypes:
+  automation_engineer:
+    label: "Automation / Workflow Engineer"
+    keywords: [automation, n8n, workflow, zapier, make, process, integration]
+    proof_priorities: ["n8n workflows built", "processes automated", "time saved"]
+    cv_emphasis: ["automation tools", "integration experience", "process optimization"]
+    interview_themes: ["scaling automation", "cross-team collaboration", "technical debt in workflows"]
+  revops_consultant:
+    label: "RevOps / Revenue Operations Consultant"
+    keywords: [revops, revenue operations, crm, salesforce, hubspot, go-to-market]
+    proof_priorities: ["revenue impact", "CRM implementations", "GTM alignment"]
+    cv_emphasis: ["revenue metrics", "CRM expertise", "cross-functional impact"]
+    interview_themes: ["GTM strategy", "sales-marketing alignment", "data-driven decisions"]
+  ai_engineer:
+    label: "AI / LLM Engineer"
+    keywords: [ai engineer, llm, langchain, rag, agents, ml, deep learning, openai, claude]
+    proof_priorities: ["AI systems deployed", "model performance metrics", "RAG implementations"]
+    cv_emphasis: ["AI/ML projects", "LLM integration", "production AI systems"]
+    interview_themes: ["AI architecture", "eval methodology", "responsible AI"]
+  platform_engineer:
+    label: "Platform / DevOps Engineer"
+    keywords: [platform, devops, infrastructure, cloud, kubernetes, terraform, ci/cd]
+    proof_priorities: ["infrastructure scaled", "deployment frequency", "reliability metrics"]
+    cv_emphasis: ["cloud infrastructure", "CI/CD pipelines", "system reliability"]
+    interview_themes: ["scaling challenges", "incident management", "developer experience"]
+  solutions_architect:
+    label: "Solutions Architect"
+    keywords: [solutions architect, technical architecture, system design, enterprise]
+    proof_priorities: ["architectures designed", "enterprise integrations", "technical leadership"]
+    cv_emphasis: ["system design", "stakeholder communication", "technical strategy"]
+    interview_themes: ["architecture decisions", "trade-offs", "cross-team influence"]
+  ai_transformation:
+    label: "AI Transformation / Enablement Lead"
+    keywords: [transformation, enablement, adoption, change management, ai strategy]
+    proof_priorities: ["adoption rates", "team enablement", "change management"]
+    cv_emphasis: ["organizational change", "training programs", "AI adoption metrics"]
+    interview_themes: ["change resistance", "measuring adoption", "executive buy-in"]

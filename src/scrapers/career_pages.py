@@ -71,8 +71,9 @@ class CareerPageScraper(BaseScraper):
         self,
         headless: bool = True,
         portals_path: Path | None = None,
+        user_id: int | None = None,
     ) -> None:
-        super().__init__(headless=headless)
+        super().__init__(headless=headless, user_id=user_id)
         self._portals_path = portals_path
         self._client: httpx.AsyncClient | None = None
 

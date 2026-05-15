@@ -171,18 +171,24 @@ class TestScoreBatch:
             assert all(isinstance(r, MatchResult) for r in results)
 
     @pytest.mark.asyncio
-    async def test_score_batch_raises_on_any_scoring_error(
+    async def test_score_batch_logs_warning_on_scoring_error(
         self, scorer: Scorer, mock_llm_client: AsyncMock
     ) -> None:
-        """Fail-fast: if one job raises ScoringError, score_batch raises."""
+        """score_batch is resilient: failed jobs are logged and skipped, not raised.
+
+        This changed from fail-fast to warn-and-continue so that one bad LLM
+        response doesn't abort scoring for all other jobs in the batch.
+        """
         mock_llm_client.complete = AsyncMock(return_value="not json")
         with get_session() as session:
             jobs = [make_job(url=f"https://example.com/batch/{i}") for i in range(2)]
             for job in jobs:
                 session.add(job)
             session.flush()
-            with pytest.raises(ScoringError):
-                await scorer.score_batch(jobs, session)
+            # Should NOT raise — errors are warned and skipped
+            results = await scorer.score_batch(jobs, session)
+        # Both jobs failed → empty result list
+        assert results == []
 
 
 class TestScoreAndPersist:

@@ -1,0 +1,36 @@
+{# Pipeline phase buttons — rendered on initial load and via HTMX polling.
+   Context: pipeline_status (dict[phase_key -> {status, started_at, ...}])
+#}
+{% set phases = [
+  ("scan",    "🔍 Scanner",         "/api/pipeline/scan",              ""),
+  ("match",   "⭐ Matcher",          "/api/pipeline/match",             ""),
+  ("apply",   "📤 Appliquer (dry)",  "/api/pipeline/apply?dry_run=true",""),
+  ("respond", "💬 Répondre",         "/api/pipeline/respond",           ""),
+] %}
+<div class="flex flex-wrap gap-3">
+  {% for phase_key, label, endpoint, _extra in phases %}
+  {% set phase_info = pipeline_status.get(phase_key, {}) if pipeline_status else {} %}
+  {% set phase_st = phase_info.get("status", "idle") if phase_info else "idle" %}
+  <button
+    {% if phase_st == "running" %}disabled{% endif %}
+    hx-post="{{ endpoint }}"
+    hx-target="#pipeline-status"
+    hx-swap="innerHTML"
+    class="pipeline-btn flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold border transition-all
+           {% if phase_st == 'running' %}
+             bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed
+           {% elif phase_st == 'done' %}
+             bg-green-50 text-green-700 border-green-200 hover:bg-green-100
+           {% elif phase_st == 'error' %}
+             bg-red-50 text-red-700 border-red-200 hover:bg-red-100
+           {% else %}
+             bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700
+           {% endif %}">
+    {% if phase_st == "running" %}<span class="spinner"></span>{% endif %}
+    {{ label }}
+    {% if phase_st == "running" %}<span class="text-xs font-normal opacity-70">en cours…</span>{% endif %}
+    {% if phase_st == "done" %}<span class="text-green-500 text-xs">✓</span>{% endif %}
+    {% if phase_st == "error" %}<span class="text-xs font-normal opacity-70">erreur</span>{% endif %}
+  </button>
+  {% endfor %}
+</div>

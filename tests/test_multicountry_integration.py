@@ -27,6 +27,8 @@ class TestMainScanMultiCountry:
 
     def test_profile_has_countries(self) -> None:
         profile_path = Path(__file__).parent.parent / "src" / "config" / "profile.yaml"
+        if not profile_path.exists():
+            pytest.skip("Real profile.yaml not present (gitignored) — skipping config validation")
         with profile_path.open() as fh:
             profile = yaml.safe_load(fh)
         countries = profile.get("search", {}).get("countries", [])

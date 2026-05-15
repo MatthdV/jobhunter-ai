@@ -106,9 +106,16 @@ class TestScraperFilters:
         assert "US" not in f2.countries
 
     def test_profile_yaml_has_search_config(self) -> None:
-        """profile.yaml must contain a search section with countries."""
+        """profile.yaml must contain a search section with countries.
+
+        Skipped when the real (gitignored) profile.yaml is absent — e.g. in
+        worktrees or CI without a local profile. This test validates the user's
+        actual profile, not the test fixture.
+        """
         import yaml
         profile_path = Path(__file__).parent.parent / "src" / "config" / "profile.yaml"
+        if not profile_path.exists():
+            pytest.skip("Real profile.yaml not present (gitignored) — skipping config validation")
         with profile_path.open() as fh:
             profile = yaml.safe_load(fh)
         search = profile.get("search", {})
