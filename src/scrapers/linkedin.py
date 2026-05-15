@@ -58,8 +58,8 @@ class LinkedInScraper(BaseScraper):
     MAX_DELAY = 7.0
     MAX_RPH = 30
 
-    def __init__(self, headless: bool = True) -> None:
-        super().__init__(headless=headless)
+    def __init__(self, headless: bool = True, user_id: int | None = None) -> None:
+        super().__init__(headless=headless, user_id=user_id)
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._playwright_ctx: Any = None

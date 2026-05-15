@@ -5,13 +5,16 @@ from pathlib import Path
 
 from types import SimpleNamespace
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+import json
+
 from src.api.background import tracker
+from src.api.deps import require_user_redirect
 from src.storage.database import get_session
-from src.storage.models import Application, ApplicationStatus, Job, JobStatus
+from src.storage.models import Application, ApplicationStatus, Job, JobStatus, MatchResult, User
 from datetime import date, datetime
 from datetime import time as _time
 
@@ -23,34 +26,46 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter()
 
 
-def _build_stats() -> dict:
-    """Build stats dict for template context."""
+def _build_stats(user_id: int) -> dict:
+    """Build stats dict for template context, filtered to *user_id*."""
     today_start = datetime.combine(date.today(), _time.min)
     with get_session() as session:
-        total_scanned = session.query(Job).count()
+        total_scanned = session.query(Job).filter(Job.user_id == user_id).count()
         total_matched = (
             session.query(Job)
-            .filter(Job.status.in_([JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED]))
+            .filter(
+                Job.user_id == user_id,
+                Job.status.in_([JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED]),
+            )
             .count()
         )
         total_applied = (
             session.query(Application)
-            .filter(Application.status == ApplicationStatus.SUBMITTED)
+            .filter(
+                Application.user_id == user_id,
+                Application.status == ApplicationStatus.SUBMITTED,
+            )
             .count()
         )
         total_replied = (
             session.query(Application)
             .filter(
+                Application.user_id == user_id,
                 Application.status.in_(
                     [ApplicationStatus.REPLIED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
-                )
+                ),
             )
             .count()
         )
-        today_scanned = session.query(Job).filter(Job.scraped_at >= today_start).count()
+        today_scanned = (
+            session.query(Job)
+            .filter(Job.user_id == user_id, Job.scraped_at >= today_start)
+            .count()
+        )
         today_matched = (
             session.query(Job)
             .filter(
+                Job.user_id == user_id,
                 Job.scraped_at >= today_start,
                 Job.status.in_([JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED]),
             )
@@ -59,6 +74,7 @@ def _build_stats() -> dict:
         today_applied = (
             session.query(Application)
             .filter(
+                Application.user_id == user_id,
                 Application.submitted_at >= today_start,
                 Application.status == ApplicationStatus.SUBMITTED,
             )
@@ -67,6 +83,7 @@ def _build_stats() -> dict:
         today_replied = (
             session.query(Application)
             .filter(
+                Application.user_id == user_id,
                 Application.updated_at >= today_start,
                 Application.status.in_(
                     [ApplicationStatus.REPLIED, ApplicationStatus.INTERVIEW, ApplicationStatus.OFFER]
@@ -95,7 +112,7 @@ def _build_stats() -> dict:
     stats_ns.today = today_ns  # type: ignore[attr-defined]
     stats_ns.total = total_ns  # type: ignore[attr-defined]
     stats_ns.pipeline_status = {  # type: ignore[attr-defined]
-        phase: info for phase, info in tracker.all().items()
+        phase: info for phase, info in tracker.all(user_id=user_id).items()
     }
 
     return stats_ns  # type: ignore[return-value]
@@ -154,12 +171,25 @@ def dashboard(
     status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_user_redirect),
 ) -> HTMLResponse:
-    """Main dashboard page."""
-    stats = _build_stats()
+    """Main dashboard page — requires auth."""
+    uid = current_user.id
+    stats = _build_stats(uid)
 
     with get_session() as session:
-        q = session.query(Job)
+        # Per-status counts for filter tab badges
+        from sqlalchemy import func
+        status_rows = (
+            session.query(Job.status, func.count(Job.id))
+            .filter(Job.user_id == uid)
+            .group_by(Job.status)
+            .all()
+        )
+        status_counts: dict[str, int] = {str(s): c for s, c in status_rows}
+        status_counts["all"] = sum(status_counts.values())
+
+        q = session.query(Job).filter(Job.user_id == uid)
         if status:
             try:
                 q = q.filter(Job.status == JobStatus(status))
@@ -188,6 +218,9 @@ def dashboard(
             "status_filter": status or "all",
             "offset": offset,
             "limit": limit,
+            "pipeline_status": stats.pipeline_status,
+            "status_counts": status_counts,
+            "current_user": current_user,
         },
     )
 
@@ -198,24 +231,109 @@ def jobs_list_page(
     status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_user_redirect),
 ) -> HTMLResponse:
     """Jobs list page — same as dashboard but can be extended later."""
-    return dashboard(request=request, status=status, limit=limit, offset=offset)
+    return dashboard(
+        request=request,
+        status=status,
+        limit=limit,
+        offset=offset,
+        current_user=current_user,
+    )
+
+
+@router.post("/jobs/{job_id}/status", response_class=HTMLResponse)
+def job_set_status(
+    request: Request,
+    job_id: int,
+    status: str = Form(...),
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Inline status update — returns a single <tr> row for HTMX swap.
+
+    Called by the ✕ / ✓ buttons in the job table via hx-post + hx-vals.
+    Form data (not JSON) so no HTMX extension is required.
+    Enforces user_id ownership check.
+    """
+    with get_session() as session:
+        job = (
+            session.query(Job)
+            .filter(Job.id == job_id, Job.user_id == current_user.id)
+            .one_or_none()
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        try:
+            job.status = JobStatus(status)  # type: ignore[assignment]
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid status '{status}'. Valid: {[s.value for s in JobStatus]}",
+            )
+        job_dict = _serialize_job(job)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/_job_row.html",
+        {"job": job_dict},
+    )
 
 
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
-def job_detail(request: Request, job_id: int) -> HTMLResponse:
-    """Job detail page."""
+def job_detail(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Job detail page — requires auth and ownership."""
+    _BLOCK_LABELS: dict[str, str] = {
+        "A_role_summary": "A — Rôle & catégorie",
+        "B_cv_match": "B — Fit CV / offre",
+        "C_level_strategy": "C — Niveau / stratégie",
+        "D_compensation": "D — Compensation",
+        "E_personalization": "E — Personnalisation",
+        "F_interview_prep": "F — Préparation entretien",
+    }
+
     with get_session() as session:
-        job = session.get(Job, job_id)
+        job = (
+            session.query(Job)
+            .filter(Job.id == job_id, Job.user_id == current_user.id)
+            .one_or_none()
+        )
         if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         job_dict = _serialize_job(job)
+
+        # Load A-F evaluation blocks from MatchResult
+        evaluation_blocks: list[dict] = []
+        archetype: str | None = None
+        mr = session.query(MatchResult).filter(MatchResult.job_id == job_id).one_or_none()
+        if mr and mr.evaluation_json:
+            try:
+                eval_data = json.loads(mr.evaluation_json)
+                archetype = eval_data.get("archetype")
+                blocks_raw = eval_data.get("blocks", {})
+                for key, label in _BLOCK_LABELS.items():
+                    block_info = blocks_raw.get(key, {})
+                    score = block_info.get("score", None)
+                    evaluation_blocks.append({
+                        "key": key,
+                        "label": label,
+                        "score": score,
+                        "details": {k: v for k, v in block_info.items() if k != "score"},
+                    })
+            except (json.JSONDecodeError, AttributeError):
+                pass  # evaluation_blocks stays empty — template handles gracefully
 
     return templates.TemplateResponse(
         request,
         "job_detail.html",
         {
             "job": job_dict,
+            "evaluation_blocks": evaluation_blocks,
+            "archetype": archetype,
+            "current_user": current_user,
         },
     )

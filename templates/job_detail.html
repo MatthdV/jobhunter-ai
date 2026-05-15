@@ -106,6 +106,62 @@
   </div>
   {% endif %}
 
+  <!-- ===== Section 2b : Blocs A-F ===== -->
+  {% if evaluation_blocks %}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Évaluation détaillée</h2>
+      {% if archetype %}
+      <span class="px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+        {{ archetype }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {% for block in evaluation_blocks %}
+      {% set score = block.score %}
+      {% if score is not none %}
+      {% set score_pct = ((score - 1.0) / 4.0 * 100) | int %}
+      {% else %}
+      {% set score_pct = 0 %}
+      {% endif %}
+      <div class="border border-gray-100 rounded-lg p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-gray-600">{{ block.label }}</span>
+          {% if score is not none %}
+          <span class="text-xs font-bold
+                       {% if score_pct >= 70 %}text-green-600
+                       {% elif score_pct >= 45 %}text-orange-500
+                       {% else %}text-red-500{% endif %}">
+            {{ score }}/5
+          </span>
+          {% else %}
+          <span class="text-xs text-gray-300">—</span>
+          {% endif %}
+        </div>
+        {% if score is not none %}
+        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div class="h-1.5 rounded-full
+                      {% if score_pct >= 70 %}bg-green-500
+                      {% elif score_pct >= 45 %}bg-orange-400
+                      {% else %}bg-red-400{% endif %}"
+               style="width: {{ score_pct }}%"></div>
+        </div>
+        {% endif %}
+        {% if block.details.get("summary") %}
+        <p class="text-xs text-gray-500 leading-relaxed">{{ block.details.summary }}</p>
+        {% elif block.details %}
+        {% set first_val = block.details.values() | list | first %}
+        {% if first_val is string %}
+        <p class="text-xs text-gray-500 leading-relaxed">{{ first_val[:120] }}{% if first_val | length > 120 %}…{% endif %}</p>
+        {% endif %}
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ===== Section 3 : Description ===== -->
   {% if job.description %}
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">

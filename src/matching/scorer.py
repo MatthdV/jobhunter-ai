@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 
 from src.config.profile import get_profile_path
 
-_PROFILE_PATH = get_profile_path()
-
 _EXPECTED_BLOCKS = frozenset(
     ["A_role_summary", "B_cv_match", "C_level_strategy",
      "D_compensation", "E_personalization", "F_interview_prep"]
@@ -149,7 +147,11 @@ class Scorer:
             model = settings.llm_scoring_model or settings.llm_model or None
             client = get_client(provider, model=model)
         self._client = client
-        with _PROFILE_PATH.open() as fh:
+        # Resolve profile path at construction time, not at module import.
+        # This ensures PROFILE_PATH env var changes (e.g. between test runs
+        # or multi-tenant Docker restarts) are picked up without re-importing.
+        profile_path = get_profile_path()
+        with profile_path.open() as fh:
             self._profile: dict[str, Any] = yaml.safe_load(fh)
         self._archetypes = self._profile.get("archetypes", {})
         try:
@@ -221,18 +223,30 @@ class Scorer:
         return match_result
 
     async def score_batch(self, jobs: list[Job], session: Session) -> list[MatchResult]:
+        # Each coroutine gets its own session to avoid concurrent commit races.
+        # SQLAlchemy Session is NOT coroutine-safe — sharing one session across
+        # asyncio.gather() tasks causes identity_map corruption and overlapping
+        # commits. We only use the incoming `session` to read job IDs; each
+        # _score_one opens its own get_session() for the write path.
+        from src.storage.database import get_session as _get_session
+
         semaphore = asyncio.Semaphore(5)
 
-        async def _score_one(job: Job) -> MatchResult:
+        async def _score_one(job_id: int) -> MatchResult:
             async with semaphore:
-                return await self.score_and_persist(job, session)
+                with _get_session() as own_session:
+                    job_obj = own_session.get(Job, job_id)
+                    if job_obj is None:
+                        raise ValueError(f"Job {job_id} not found")
+                    return await self.score_and_persist(job_obj, own_session)
 
-        tasks = [_score_one(job) for job in jobs]
+        job_ids = [j.id for j in jobs]
+        tasks = [_score_one(jid) for jid in job_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         out: list[MatchResult] = []
-        for job, res in zip(jobs, results):
+        for job_id, res in zip(job_ids, results):
             if isinstance(res, Exception):
-                logger.warning("Scoring failed for job %r (%s): %s", job.title, job.id, res)
+                logger.warning("Scoring failed for job_id=%s: %s", job_id, res)
             else:
                 out.append(res)
         return out
