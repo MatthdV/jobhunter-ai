@@ -54,6 +54,8 @@ job_sources:
     search_terms: [automation, python]
     location: Paris
     countries: [FR]
+    work_modes: [remote, hybrid]
+    auto_translate: true
 
 archetypes:
   automation_engineer:

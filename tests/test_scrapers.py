@@ -76,15 +76,15 @@ class TestScraperFilters:
         assert "CDD" not in f2.contract_types
 
     def test_custom_values(self) -> None:
-        f = ScraperFilters(remote_only=False, min_salary=80000)
+        f = ScraperFilters(work_modes=["hybrid", "on-site"], min_salary=80000)
         assert f.remote_only is False
         assert f.min_salary == 80000
 
     def test_is_dataclass(self) -> None:
         field_names = {f.name for f in fields(ScraperFilters)}
         assert field_names == {
-            "remote_only", "contract_types", "min_salary", "excluded_keywords",
-            "countries", "location",
+            "work_modes", "contract_types", "min_salary", "excluded_keywords",
+            "countries", "location", "max_days_old",
         }
 
     def test_default_countries(self) -> None:
@@ -1199,6 +1199,7 @@ class TestIndeedApiSearch:
         scraper.headless = True
         from src.scrapers.base import _TokenBucket
         scraper._token_bucket = _TokenBucket(3600, 1.0)
+        scraper._user_id = None
         scraper._api_key = "test-key"
         scraper._client = _MagicMock()
         scraper._client.get = _AsyncMock(return_value=detail_resp)
@@ -1223,6 +1224,7 @@ class TestIndeedApiSearch:
         scraper.headless = True
         from src.scrapers.base import _TokenBucket
         scraper._token_bucket = _TokenBucket(3600, 1.0)
+        scraper._user_id = None
         scraper._api_key = "test-key"
         scraper._client = _MagicMock()
         scraper._client.get = _AsyncMock(return_value=detail_resp)

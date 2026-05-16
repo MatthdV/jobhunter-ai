@@ -67,6 +67,7 @@ class User(Base):
     max_apps_per_day = Column(Integer, default=10)
     active_sources = Column(String(200), default="wttj")   # comma-separated
     dry_run = Column(Boolean, default=True)
+    max_days_old = Column(Integer, default=30)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

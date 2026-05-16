@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 from urllib.parse import quote_plus
 
@@ -14,6 +15,12 @@ from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
 
 logger = logging.getLogger(__name__)
+
+_WTTJ_REMOTE_PARAM: dict[str, str] = {
+    "remote": "full",
+    "hybrid": "partial",
+    "on-site": "",
+}
 
 
 class WTTJScraper(BaseScraper):
@@ -99,7 +106,10 @@ class WTTJScraper(BaseScraper):
         page.on("response", _handle_response)
 
         query = quote_plus(" ".join(keywords))
-        url = f"{self._BASE_URL}?query={query}&remote=true"
+        work_mode = (filters.work_modes or ["remote"])[0]
+        remote_val = _WTTJ_REMOTE_PARAM.get(work_mode, "full")
+        remote_qs = f"&remote={remote_val}" if remote_val else ""
+        url = f"{self._BASE_URL}?query={query}{remote_qs}"
 
         try:
             await self._wait()
@@ -109,6 +119,15 @@ class WTTJScraper(BaseScraper):
             logger.warning("WTTJ page load failed: %s", exc)
         finally:
             await page.close()
+
+        # Post-filter by published_at (Unix timestamp) if max_days_old set
+        if filters.max_days_old and collected:
+            cutoff = time.time() - filters.max_days_old * 86400
+            collected = [
+                h for h in collected
+                if not isinstance(h.get("published_at"), (int, float))
+                or h["published_at"] >= cutoff
+            ]
 
         return collected[:limit]
 

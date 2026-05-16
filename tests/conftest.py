@@ -23,9 +23,16 @@ def set_test_profile_path() -> None:
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    if not os.getenv("SKIP_WEASYPRINT"):
-        return
-    skip = pytest.mark.skip(reason="SKIP_WEASYPRINT env var is set")
-    for item in items:
-        if item.get_closest_marker("weasyprint"):
-            item.add_marker(skip)
+    _weasyprint_ok = True
+    try:
+        from weasyprint import HTML  # noqa: F401
+    except (OSError, ImportError):
+        _weasyprint_ok = False
+
+    skip_env = os.getenv("SKIP_WEASYPRINT")
+    if not _weasyprint_ok or skip_env:
+        reason = "WeasyPrint native libraries not installed" if not _weasyprint_ok else "SKIP_WEASYPRINT env var is set"
+        skip = pytest.mark.skip(reason=reason)
+        for item in items:
+            if item.get_closest_marker("weasyprint"):
+                item.add_marker(skip)

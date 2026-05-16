@@ -57,6 +57,26 @@ search:
   base_currency: "EUR"
 
 # ---------------------------------------------------------------------------
+# Job sources — one entry per source/location combination
+# ---------------------------------------------------------------------------
+job_sources:
+  - name: wttj                       # welcome to the jungle
+    enabled: true
+    search_terms: [automation engineer, python developer]
+    location: Paris
+    countries: [FR]
+    work_modes: [remote, hybrid]     # remote | hybrid | on-site (one request per mode)
+    auto_translate: true             # translate search_terms to country language (FR → adds French terms)
+
+  - name: wttj
+    enabled: true
+    search_terms: [automation engineer, python developer]
+    location: London
+    countries: [GB]
+    work_modes: [remote]
+    auto_translate: false
+
+# ---------------------------------------------------------------------------
 # Search keywords — used by scrapers
 # ---------------------------------------------------------------------------
 search_keywords:

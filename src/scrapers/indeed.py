@@ -21,6 +21,12 @@ _INDEED_BASE_URL = "https://fr.indeed.com/jobs"
 # Remote filter param for Indeed France
 _REMOTE_PARAM = "032b3"
 
+_INDEED_REMOTE_QS: dict[str, str] = {
+    "remote": f"remotejob={_REMOTE_PARAM}",
+    "hybrid": "sc=0kf%3Attr(DSQF7)%3B",
+    "on-site": "",
+}
+
 
 class IndeedScraper(BaseScraper):
     """Scrape Indeed France job listings.
@@ -86,7 +92,11 @@ class IndeedScraper(BaseScraper):
 
         try:
             while len(all_cards) < limit:
-                url = f"{base_url}?q={query}&remotejob={_REMOTE_PARAM}&start={start}"
+                work_mode = (filters.work_modes or ["remote"])[0]
+                remote_qs_part = _INDEED_REMOTE_QS.get(work_mode, f"remotejob={_REMOTE_PARAM}")
+                remote_qs = f"&{remote_qs_part}" if remote_qs_part else ""
+                age_qs = f"&fromage={filters.max_days_old}" if filters.max_days_old else ""
+                url = f"{base_url}?q={query}{remote_qs}{age_qs}&start={start}"
                 await self._wait()
                 await page.goto(url)
                 await page.wait_for_load_state("networkidle")

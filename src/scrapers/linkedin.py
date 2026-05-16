@@ -20,7 +20,13 @@ from src.storage.models import Job
 logger = logging.getLogger(__name__)
 
 _COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
-_SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}&f_WT=2"
+_SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}{geo}{wt}"
+
+_LI_WORK_TYPE: dict[str, str] = {
+    "remote": "&f_WT=2",
+    "hybrid": "&f_WT=3",
+    "on-site": "&f_WT=1",
+}
 _LI_BASE = "https://www.linkedin.com"
 
 _GEO_IDS: dict[str, str] = {
@@ -172,7 +178,10 @@ class LinkedInScraper(BaseScraper):
             kw = quote_plus(" ".join(keywords))
             geo = _GEO_IDS.get(country_code, "")
             geo_param = f"&geoId={geo}" if geo else ""
-            search_url = _SEARCH_URL.format(kw=kw) + geo_param
+            work_mode = (filters.work_modes or ["remote"])[0]
+            wt_param = _LI_WORK_TYPE.get(work_mode, "&f_WT=2")
+            tpr_param = f"&f_TPR=r{filters.max_days_old * 86400}" if filters.max_days_old else ""
+            search_url = _SEARCH_URL.format(kw=kw, geo=geo_param, wt=wt_param) + tpr_param
 
             await self._wait()
             await page.goto(search_url, wait_until="domcontentloaded")

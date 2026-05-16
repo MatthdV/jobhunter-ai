@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Default job_source entry added when a source is first enabled via the UI
+_DEFAULT_SOURCE_ENTRY: dict[str, object] = {
+    "enabled": True,
+    "search_terms": [],
+    "location": "",
+    "countries": ["FR"],
+    "work_modes": ["remote"],
+    "auto_translate": False,
+}
+
+AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin"]
+
 
 # ---------------------------------------------------------------------------
 # Profile YAML
@@ -147,3 +159,78 @@ def update_credentials(
         stored_keys=stored,
         available_keys=list(_CREDENTIAL_FIELDS),
     )
+
+
+# ---------------------------------------------------------------------------
+# Source toggle
+# ---------------------------------------------------------------------------
+
+
+class SourceToggleIn(BaseModel):
+    source: str   # "wttj" | "indeed" | "linkedin"
+    enabled: bool
+
+
+class SourcesOut(BaseModel):
+    active_sources: list[str]
+
+
+def _get_active_sources(profile: dict) -> list[str]:
+    """Return names of enabled sources in profile job_sources."""
+    return [
+        s["name"] for s in profile.get("job_sources", [])
+        if s.get("enabled", True) and s.get("name")
+    ]
+
+
+@router.post("/profile/sources", response_model=SourcesOut)
+def toggle_source(
+    body: SourceToggleIn,
+    current_user: User = Depends(get_current_user),
+) -> SourcesOut:
+    """Enable or disable a job source in the user's profile YAML.
+
+    Enabling adds a default entry if no entry for that source exists.
+    Disabling sets ``enabled: false`` on all entries for that source.
+    """
+    if body.source not in AVAILABLE_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown source '{body.source}'. Valid: {AVAILABLE_SOURCES}",
+        )
+
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+
+    sources: list[dict] = list(profile.get("job_sources", []))
+
+    existing = [s for s in sources if s.get("name") == body.source]
+
+    if body.enabled:
+        if not existing:
+            sources.append({"name": body.source, **_DEFAULT_SOURCE_ENTRY})
+        else:
+            for s in existing:
+                s["enabled"] = True
+    else:
+        for s in existing:
+            s["enabled"] = False
+
+    profile["job_sources"] = sources
+    updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
+
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = updated_yaml  # type: ignore[assignment]
+
+    return SourcesOut(active_sources=_get_active_sources(profile))
+
+
+@router.get("/profile/sources", response_model=SourcesOut)
+def get_sources(current_user: User = Depends(get_current_user)) -> SourcesOut:
+    """Return list of currently active source names."""
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+    return SourcesOut(active_sources=_get_active_sources(profile))

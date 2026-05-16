@@ -85,6 +85,23 @@ def _get_session_factory() -> sessionmaker[Session]:
 # ---------------------------------------------------------------------------
 
 
+def _migrate_schema(engine: Engine) -> None:
+    """Apply additive schema changes for columns added after initial create_all.
+
+    SQLite supports ALTER TABLE ADD COLUMN. OperationalError = column exists, safe to ignore.
+    """
+    new_columns = [
+        ("users", "max_days_old INTEGER DEFAULT 30"),
+    ]
+    with engine.connect() as conn:
+        for table, col_def in new_columns:
+            try:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_def}"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+
 def init_db(database_url: str | None = None) -> None:
     """Create all tables declared in models.py if they don't already exist.
 
@@ -93,7 +110,9 @@ def init_db(database_url: str | None = None) -> None:
     """
     if database_url:
         configure(database_url)
-    Base.metadata.create_all(bind=_get_engine())
+    engine = _get_engine()
+    Base.metadata.create_all(bind=engine)
+    _migrate_schema(engine)
 
 
 def drop_all() -> None:
