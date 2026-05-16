@@ -41,7 +41,7 @@
     <!-- Pipeline status — polled every 3s via HTMX (innerHTML swap keeps outer div attrs) -->
     <div id="pipeline-status"
          hx-get="/api/pipeline/status-partial"
-         hx-trigger="every 3s"
+         hx-trigger="every 3s, refresh from:body"
          hx-swap="innerHTML">
       {% include "partials/pipeline_controls.html" %}
     </div>

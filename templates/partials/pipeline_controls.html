@@ -14,8 +14,8 @@
   <button
     {% if phase_st == "running" %}disabled{% endif %}
     hx-post="{{ endpoint }}"
-    hx-target="#pipeline-status"
-    hx-swap="innerHTML"
+    hx-swap="none"
+    hx-on::after-request="htmx.trigger('#pipeline-status', 'refresh')"
     class="pipeline-btn flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold border transition-all
            {% if phase_st == 'running' %}
              bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed
