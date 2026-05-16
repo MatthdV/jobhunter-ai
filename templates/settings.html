@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Paramètres — JobHunter AI{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-8">
+
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Paramètres</h1>
+    <p class="text-sm text-gray-500 mt-1">Configurer la recherche et les sources.</p>
+  </div>
+
+  <!-- Search preferences -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">Recherche</h2>
+    </div>
+    <form hx-post="/settings/search"
+          hx-target="body"
+          hx-swap="none"
+          class="px-6 py-5 space-y-5">
+
+      <!-- max_days_old -->
+      <div>
+        <label for="max_days_old" class="block text-sm font-medium text-gray-700 mb-1">
+          Ancienneté max des offres
+        </label>
+        <select id="max_days_old"
+                name="max_days_old"
+                class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm
+                       focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+          <option value="1"  {% if current_user.max_days_old == 1  %}selected{% endif %}>Aujourd'hui (1 jour)</option>
+          <option value="3"  {% if current_user.max_days_old == 3  %}selected{% endif %}>3 jours</option>
+          <option value="7"  {% if current_user.max_days_old == 7  %}selected{% endif %}>7 jours</option>
+          <option value="14" {% if current_user.max_days_old == 14 %}selected{% endif %}>2 semaines</option>
+          <option value="30" {% if current_user.max_days_old == 30 or not current_user.max_days_old %}selected{% endif %}>30 jours (défaut)</option>
+          <option value="0"  {% if current_user.max_days_old == 0  %}selected{% endif %}>Tout (pas de filtre)</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-400">
+          Indeed et LinkedIn filtrent via l'API. WTTJ filtre en post-traitement si le champ date est disponible.
+        </p>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
+                       hover:bg-indigo-700 transition-colors">
+          Sauvegarder
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Job sources -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">Sources actives</h2>
+      <p class="text-xs text-gray-400 mt-0.5">
+        Activer une source ajoute une entrée dans votre profil YAML. Les mots-clés et locations sont à configurer dans le YAML.
+      </p>
+    </div>
+    <div class="px-6 py-5 space-y-3" id="sources-section">
+      {% set active = current_user.profile_yaml | default('') %}
+      {% for src_name, src_label, src_desc in [
+          ('wttj',     'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
+          ('indeed',   'Indeed',                'JSearch RapidAPI ou Playwright (configurable)'),
+          ('linkedin', 'LinkedIn',              'Scraper Playwright — nécessite un compte'),
+      ] %}
+      <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+        <div>
+          <p class="text-sm font-medium text-gray-800">{{ src_label }}</p>
+          <p class="text-xs text-gray-400">{{ src_desc }}</p>
+        </div>
+        <button
+          id="toggle-{{ src_name }}"
+          onclick="toggleSource('{{ src_name }}')"
+          data-source="{{ src_name }}"
+          class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                 transition-colors duration-200 ease-in-out focus:outline-none
+                 source-toggle bg-gray-200">
+          <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow
+                       ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Profile YAML -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">Profil YAML</h2>
+      <p class="text-xs text-gray-400 mt-0.5">
+        Configurer les sources (<code>job_sources</code>), les mots-clés, les modes de travail, etc.
+      </p>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <textarea id="profile-yaml"
+                class="w-full h-80 font-mono text-xs rounded-lg border border-gray-300 p-3
+                       focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                placeholder="Coller votre profil YAML ici…">{{ current_user.profile_yaml or '' }}</textarea>
+      <div class="flex justify-end gap-3">
+        <button onclick="loadYaml()"
+                class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                       hover:bg-gray-200 transition-colors">
+          Recharger
+        </button>
+        <button onclick="saveYaml()"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
+                       hover:bg-indigo-700 transition-colors">
+          Sauvegarder YAML
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credentials info -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">Clés API</h2>
+    </div>
+    <div class="px-6 py-5">
+      <p class="text-sm text-gray-500">
+        Les clés API (Anthropic, OpenAI, etc.) sont configurables via l'API :
+        <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded">PUT /api/credentials</code>
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Source toggles
+  async function initSources() {
+    try {
+      const res = await fetch('/api/profile/sources');
+      if (!res.ok) return;
+      const data = await res.json();
+      const active = new Set(data.active_sources);
+      document.querySelectorAll('.source-toggle').forEach(btn => {
+        const src = btn.dataset.source;
+        setToggleState(btn, active.has(src));
+      });
+    } catch (e) { /* silent */ }
+  }
+
+  function setToggleState(btn, isOn) {
+    const span = btn.querySelector('span');
+    if (isOn) {
+      btn.classList.remove('bg-gray-200');
+      btn.classList.add('bg-indigo-600');
+      span.classList.remove('translate-x-0');
+      span.classList.add('translate-x-5');
+    } else {
+      btn.classList.add('bg-gray-200');
+      btn.classList.remove('bg-indigo-600');
+      span.classList.add('translate-x-0');
+      span.classList.remove('translate-x-5');
+    }
+    btn.dataset.active = isOn ? '1' : '0';
+  }
+
+  async function toggleSource(name) {
+    const btn = document.getElementById('toggle-' + name);
+    const isCurrentlyOn = btn.dataset.active === '1';
+    const newState = !isCurrentlyOn;
+    try {
+      const res = await fetch('/api/profile/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: name, enabled: newState }),
+      });
+      if (res.ok) {
+        setToggleState(btn, newState);
+        showToast(newState ? name + ' activé' : name + ' désactivé', 'success');
+      } else {
+        showToast('Erreur lors de la mise à jour', 'error');
+      }
+    } catch (e) {
+      showToast('Erreur réseau', 'error');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', initSources);
+
+  async function saveYaml() {
+    const yaml = document.getElementById('profile-yaml').value;
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_yaml: yaml }),
+      });
+      if (res.ok) {
+        showToast('Profil YAML sauvegardé', 'success');
+      } else {
+        const err = await res.json();
+        showToast('Erreur : ' + (err.detail || 'YAML invalide'), 'error');
+      }
+    } catch (e) {
+      showToast('Erreur réseau', 'error');
+    }
+  }
+
+  async function loadYaml() {
+    try {
+      const res = await fetch('/api/profile');
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById('profile-yaml').value = data.profile_yaml || '';
+        showToast('Profil rechargé', 'info');
+      }
+    } catch (e) {
+      showToast('Erreur réseau', 'error');
+    }
+  }
+</script>
+{% endblock %}

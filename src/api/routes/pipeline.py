@@ -79,6 +79,27 @@ async def _run_scan(user_id: int) -> None:
             source_key = _SOURCE_NAME_MAP.get(source.get("name", ""), "")
             keywords = source.get("search_terms", [])
             location = source.get("location", "")
+            countries = source.get("countries", ["FR"])
+
+            # Work modes — one request per mode; default remote for backward compat
+            work_modes_raw = source.get("work_modes", ["remote"])
+            work_modes = [m for m in work_modes_raw if m in ("remote", "hybrid", "on-site")] or ["remote"]
+
+            # Auto-translate search terms to country language
+            all_keywords = list(keywords)
+            if source.get("auto_translate", False) and keywords:
+                from src.scrapers.translate import detect_language, translate_keywords
+                target_lang = detect_language(countries)
+                if target_lang != "en":
+                    llm_for_translate = None
+                    try:
+                        from src.llm.client import get_client
+                        llm_for_translate = get_client()
+                    except Exception:
+                        pass
+                    all_keywords = await translate_keywords(
+                        keywords, target_lang, llm_client=llm_for_translate
+                    )
 
             if not source_key or not keywords:
                 logger.warning(
@@ -102,24 +123,34 @@ async def _run_scan(user_id: int) -> None:
                 logger.warning("Could not load scraper for %r: %s", source_key, exc)
                 continue
 
-            try:
-                async with scraper:
-                    jobs = await scraper.search(
-                        keywords=keywords,
-                        location=location,
-                        limit=50,
-                        seen_urls=existing_urls,
-                    )
-                fresh = [j for j in jobs if j.url not in existing_urls]
-                if fresh:
-                    with get_session() as session:
-                        for job in fresh:
-                            job.user_id = user_id  # type: ignore[assignment]
-                            session.add(job)
-                            existing_urls.add(job.url)
-                    new_count += len(fresh)
-            except Exception:
-                logger.exception("Scraper %r raised an error", source_key)
+            from src.scrapers.filters import ScraperFilters
+            max_days_old = user.max_days_old if hasattr(user, "max_days_old") else 30
+            for work_mode in work_modes:
+                mode_filters = ScraperFilters(
+                    work_modes=[work_mode],
+                    countries=countries,
+                    location=location,
+                    max_days_old=max_days_old,
+                )
+                try:
+                    async with scraper:
+                        jobs = await scraper.search(
+                            keywords=all_keywords,
+                            location=location,
+                            filters=mode_filters,
+                            limit=50,
+                            seen_urls=existing_urls,
+                        )
+                    fresh = [j for j in jobs if j.url not in existing_urls]
+                    if fresh:
+                        with get_session() as session:
+                            for job in fresh:
+                                job.user_id = user_id  # type: ignore[assignment]
+                                session.add(job)
+                                existing_urls.add(job.url)
+                        new_count += len(fresh)
+                except Exception:
+                    logger.exception("Scraper %r mode=%r raised an error", source_key, work_mode)
 
         tracker.done("scan", user_id=user_id, result={"new_jobs": new_count})
     except Exception as exc:
@@ -383,6 +414,7 @@ async def trigger_match(
     current_user: User = Depends(get_current_user),
 ) -> PipelineStartResponse:
     """Launch the match (AI scoring) phase in the background."""
+    await _atomic_start("match", current_user.id)
     user_cfg = get_settings_for_user(current_user)
     if not any(
         user_cfg.get(k)
@@ -393,7 +425,6 @@ async def trigger_match(
             status_code=400,
             detail="AI provider API key not configured. Set it in credentials or .env.",
         )
-    await _atomic_start("match", current_user.id)
     background_tasks.add_task(_run_match, current_user.id)
     return PipelineStartResponse(
         status="started",
@@ -409,6 +440,7 @@ async def trigger_apply(
     dry_run: bool = Query(True, description="When false, submits applications live"),
 ) -> PipelineStartResponse:
     """Launch the apply (CV generation) phase in the background."""
+    await _atomic_start("apply", current_user.id)
     user_cfg = get_settings_for_user(current_user)
     if not any(
         user_cfg.get(k)
@@ -419,7 +451,6 @@ async def trigger_apply(
             status_code=400,
             detail="AI provider API key not configured. Set it in credentials or .env.",
         )
-    await _atomic_start("apply", current_user.id)
     background_tasks.add_task(_run_apply, current_user.id, dry_run)
     return PipelineStartResponse(
         status="started",
@@ -434,6 +465,7 @@ async def trigger_respond(
     current_user: User = Depends(get_current_user),
 ) -> PipelineStartResponse:
     """Launch the respond (Gmail reply check) phase in the background."""
+    await _atomic_start("respond", current_user.id)
     user_cfg = get_settings_for_user(current_user)
     if not (
         user_cfg.get("gmail_client_id")
@@ -444,7 +476,6 @@ async def trigger_respond(
             status_code=400,
             detail="Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token.",
         )
-    await _atomic_start("respond", current_user.id)
     background_tasks.add_task(_run_respond, current_user.id)
     return PipelineStartResponse(
         status="started",

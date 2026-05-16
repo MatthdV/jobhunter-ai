@@ -337,3 +337,39 @@ def job_detail(
             "current_user": current_user,
         },
     )
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """User settings page."""
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"current_user": current_user},
+    )
+
+
+@router.post("/settings/search", response_class=HTMLResponse)
+def update_search_settings(
+    request: Request,
+    max_days_old: int = Form(30),
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Save max_days_old preference."""
+    value = max_days_old if max_days_old > 0 else None
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404)
+        user.max_days_old = value  # type: ignore[assignment]
+    from fastapi.responses import Response as _Resp
+    resp = templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"current_user": current_user, "saved": True},
+    )
+    resp.headers["X-Toast"] = '{"message":"Paramètres sauvegardés","type":"success"}'
+    return resp
