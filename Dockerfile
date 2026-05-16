@@ -15,15 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies (all-llm + api group for auth deps: jose, passlib, cryptography)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[all-llm]"
+RUN pip install --no-cache-dir -e ".[all-llm,api]"
 
 # Install Playwright browsers
 RUN playwright install chromium --with-deps
-
-# Install optional API dependencies
-RUN pip install --no-cache-dir "fastapi>=0.115.0" "uvicorn[standard]>=0.34.0"
 
 # Copy source
 COPY src/ src/
