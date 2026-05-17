@@ -345,10 +345,34 @@ def settings_page(
     current_user: User = Depends(require_user_redirect),
 ) -> HTMLResponse:
     """User settings page."""
+    import yaml as _yaml
+    from src.api.user_settings import get_credential_names
+
+    raw_yaml = current_user.profile_yaml or ""
+    profile_data: dict = _yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+
+    # Per-source config — first entry per source name
+    source_configs: dict = {}
+    for src in profile_data.get("job_sources", []):
+        name = src.get("name")
+        if name and name not in source_configs:
+            source_configs[name] = {
+                "keywords": src.get("search_terms", []),
+                "location": src.get("location", ""),
+                "work_modes": src.get("work_modes", ["remote"]),
+            }
+
+    stored_creds = get_credential_names(current_user)
+
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {"current_user": current_user},
+        {
+            "current_user": current_user,
+            "profile_data": profile_data,
+            "source_configs": source_configs,
+            "stored_creds": stored_creds,
+        },
     )
 
 
