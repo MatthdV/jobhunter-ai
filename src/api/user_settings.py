@@ -26,6 +26,8 @@ _CREDENTIAL_FIELDS = (
     "telegram_chat_id",
     "linkedin_email",
     "linkedin_password",
+    "wttj_email",
+    "wttj_password",
     "indeed_api_key",
 )
 
@@ -57,6 +59,8 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
         "telegram_chat_id": settings.telegram_chat_id,
         "linkedin_email": settings.linkedin_email,
         "linkedin_password": settings.linkedin_password,
+        "wttj_email": settings.wttj_email,
+        "wttj_password": settings.wttj_password,
         "indeed_api_key": settings.indeed_api_key,
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,

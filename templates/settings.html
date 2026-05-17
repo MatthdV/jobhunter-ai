@@ -277,6 +277,8 @@
       {% for field_name, field_label, field_hint in [
           ('openrouter_api_key', 'OpenRouter API Key', 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
           ('anthropic_api_key',  'Anthropic API Key',  'Optionnel — si vous préférez Claude directement.'),
+          ('wttj_email',         'WTTJ Email',         'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
+          ('wttj_password',      'WTTJ Mot de passe',  'Mot de passe Welcome to the Jungle.'),
       ] %}
       <div>
         <div class="flex items-center gap-2 mb-1">
@@ -476,7 +478,7 @@
   // Credentials save
   // ────────────────────────────────────────────────────────
   async function saveCredentials() {
-    const fields = ['openrouter_api_key', 'anthropic_api_key'];
+    const fields = ['openrouter_api_key', 'anthropic_api_key', 'wttj_email', 'wttj_password'];
     const credentials = {};
     fields.forEach(f => {
       const el = document.getElementById('cred-' + f);

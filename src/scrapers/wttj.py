@@ -7,7 +7,7 @@ import time
 from typing import Any
 from urllib.parse import quote_plus
 
-from playwright.async_api import Browser, Page, Response, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, Response, async_playwright
 
 from src.scrapers.base import BaseScraper
 from src.scrapers.exceptions import ParseError
@@ -42,9 +42,12 @@ class WTTJScraper(BaseScraper):
 
     _BASE_URL = "https://www.welcometothejungle.com/fr/jobs"
 
+    _SIGNIN_URL = "https://www.welcometothejungle.com/fr/authenticate/signin"
+
     def __init__(self, headless: bool = True, user_id: int | None = None) -> None:
         super().__init__(headless=headless, user_id=user_id)
         self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
         self._page: Page | None = None
         self._playwright_ctx: Any = None
 
@@ -55,12 +58,64 @@ class WTTJScraper(BaseScraper):
     async def _setup(self) -> None:
         self._playwright_ctx = await async_playwright().start()
         self._browser = await self._playwright_ctx.chromium.launch(headless=self.headless)
+        self._context = await self._browser.new_context()
+        email, password = self._get_wttj_credentials()
+        if email and password:
+            await self._login(email, password)
+        else:
+            logger.warning("WTTJ: no credentials configured — search may return 0 results (auth required)")
 
     async def _teardown(self) -> None:
+        if self._context:
+            await self._context.close()
         if self._browser:
             await self._browser.close()
         if self._playwright_ctx:
             await self._playwright_ctx.stop()
+
+    def _get_wttj_credentials(self) -> tuple[str, str]:
+        """Return (email, password) from per-user encrypted store or global settings."""
+        from src.config.settings import settings as _settings
+        email = _settings.wttj_email
+        password = _settings.wttj_password
+        if self._user_id is not None:
+            try:
+                from src.api.user_settings import get_settings_for_user
+                from src.storage.database import get_session
+                from src.storage.models import User
+                with get_session() as session:
+                    user = session.get(User, self._user_id)
+                    if user:
+                        session.expunge(user)
+                        u_cfg = get_settings_for_user(user)
+                        email = u_cfg.get("wttj_email") or email
+                        password = u_cfg.get("wttj_password") or password
+            except Exception as exc:
+                logger.debug("WTTJ: could not load per-user credentials: %s", exc)
+        return email, password
+
+    async def _login(self, email: str, password: str) -> None:
+        """Log into WTTJ; session cookies persist in self._context."""
+        assert self._context is not None
+        page = await self._context.new_page()
+        try:
+            await page.goto(self._SIGNIN_URL)
+            # Accept cookie consent if present
+            try:
+                btn = page.locator("button:has-text('OK pour moi')")
+                await btn.wait_for(timeout=4000)
+                await btn.click()
+            except Exception:
+                pass
+            await page.fill("input[name='session.email']", email)
+            await page.fill("input[name='session.password']", password)
+            await page.click("button[type='submit']:has-text('Se connecter')")
+            await page.wait_for_load_state("networkidle", timeout=15000)
+            logger.info("WTTJ: authenticated as %s", email)
+        except Exception as exc:
+            logger.warning("WTTJ login failed: %s", exc)
+        finally:
+            await page.close()
 
     # ------------------------------------------------------------------
     # _fetch_raw — XHR intercept
@@ -78,28 +133,31 @@ class WTTJScraper(BaseScraper):
             logger.warning("WTTJ only supports FR, skipping country=%s", country_code)
             return []
 
-        assert self._browser is not None, "_setup() must be called first"
+        assert self._context is not None, "_setup() must be called first"
 
         collected: list[dict[str, Any]] = []
-        page = await self._browser.new_page()
+        page = await self._context.new_page()
 
         async def _handle_response(response: Response) -> None:
             url = response.url
-            # WTTJ uses Algolia for job search (multi-index query endpoint)
+            # WTTJ v3 authenticated API (current)
+            is_wttj_v3 = "api.welcometothejungle.com" in url and "search/jobs" in url
+            # Legacy Algolia endpoint (may still fire for some markets)
             is_algolia = "algolia.net" in url and "queries" in url
-            # Fallback: legacy WTTJ internal API
-            is_wttj_api = "/api/" in url and "jobs" in url
-            if not (is_algolia or is_wttj_api):
+            # Legacy WTTJ internal API
+            is_wttj_api = "/api/" in url and "jobs" in url and "welcometothejungle" in url
+            if not (is_wttj_v3 or is_algolia or is_wttj_api):
                 return
             try:
                 data = await response.json()
-                # Algolia multi-index response: {"results": [{"hits": [...]}]}
-                if isinstance(data, dict) and "results" in data:
+                # WTTJ v3: {"jobs": [...], "meta": {...}}
+                if isinstance(data, dict) and "jobs" in data:
+                    collected.extend(data["jobs"])
+                # Algolia multi-index: {"results": [{"hits": [...]}]}
+                elif isinstance(data, dict) and "results" in data:
                     for result in data["results"]:
                         hits = result.get("hits", [])
                         collected.extend(hits)
-                elif isinstance(data, dict) and "jobs" in data:
-                    collected.extend(data["jobs"])
             except Exception as exc:
                 logger.warning("Failed to parse XHR response from %s: %s", response.url, exc)
 

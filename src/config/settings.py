@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     linkedin_email: str = Field("", description="LinkedIn account email for Playwright scraping")
     linkedin_password: str = Field("", description="LinkedIn account password")
 
+    # --- Welcome to the Jungle ---
+    wttj_email: str = Field("", description="WTTJ account email for authenticated scraping")
+    wttj_password: str = Field("", description="WTTJ account password")
+
     # --- Indeed API ---
     indeed_api_key: str = Field("", description="RapidAPI key for JSearch (Indeed) API")
     indeed_mode: str = Field("api", description='Indeed scraper backend: "api" | "playwright"')
