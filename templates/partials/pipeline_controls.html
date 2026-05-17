@@ -2,10 +2,10 @@
    Context: pipeline_status (dict[phase_key -> {status, started_at, ...}])
 #}
 {% set phases = [
-  ("scan",    "🔍 Scanner",         "/api/pipeline/scan",              ""),
-  ("match",   "⭐ Matcher",          "/api/pipeline/match",             ""),
-  ("apply",   "📤 Appliquer (dry)",  "/api/pipeline/apply?dry_run=true",""),
-  ("respond", "💬 Répondre",         "/api/pipeline/respond",           ""),
+  ("scan",    t.phase_scan if t else "🔍 Scanner",         "/api/pipeline/scan",              ""),
+  ("match",   t.phase_match if t else "⭐ Matcher",         "/api/pipeline/match",             ""),
+  ("apply",   t.phase_apply if t else "📤 Appliquer (dry)", "/api/pipeline/apply?dry_run=true",""),
+  ("respond", t.phase_respond if t else "💬 Répondre",      "/api/pipeline/respond",           ""),
 ] %}
 <div class="flex flex-wrap gap-3">
   {% for phase_key, label, endpoint, _extra in phases %}
@@ -28,9 +28,9 @@
            {% endif %}">
     {% if phase_st == "running" %}<span class="spinner"></span>{% endif %}
     {{ label }}
-    {% if phase_st == "running" %}<span class="text-xs font-normal opacity-70">en cours…</span>{% endif %}
+    {% if phase_st == "running" %}<span class="text-xs font-normal opacity-70">{{ t.phase_running if t else "en cours…" }}</span>{% endif %}
     {% if phase_st == "done" %}<span class="text-green-500 text-xs">✓</span>{% endif %}
-    {% if phase_st == "error" %}<span class="text-xs font-normal opacity-70">erreur</span>{% endif %}
+    {% if phase_st == "error" %}<span class="text-xs font-normal opacity-70">{{ t.phase_error if t else "erreur" }}</span>{% endif %}
   </button>
   {% endfor %}
 </div>

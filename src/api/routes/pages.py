@@ -13,6 +13,7 @@ import json
 
 from src.api.background import tracker
 from src.api.deps import require_user_redirect
+from src.api.i18n import get_t, get_ui_lang
 from src.storage.database import get_session
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus, MatchResult, User
 from datetime import date, datetime
@@ -207,6 +208,7 @@ def dashboard(
 
     jobs_ns = SimpleNamespace(items=jobs_list, total=total)
 
+    t = get_t(current_user)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -221,6 +223,8 @@ def dashboard(
             "pipeline_status": stats.pipeline_status,
             "status_counts": status_counts,
             "current_user": current_user,
+            "t": t,
+            "current_lang": get_ui_lang(current_user),
         },
     )
 
@@ -276,7 +280,7 @@ def job_set_status(
     return templates.TemplateResponse(
         request,
         "partials/_job_row.html",
-        {"job": job_dict},
+        {"job": job_dict, "t": get_t(current_user)},
     )
 
 
@@ -287,13 +291,14 @@ def job_detail(
     current_user: User = Depends(require_user_redirect),
 ) -> HTMLResponse:
     """Job detail page — requires auth and ownership."""
+    t = get_t(current_user)
     _BLOCK_LABELS: dict[str, str] = {
-        "A_role_summary": "A — Rôle & catégorie",
-        "B_cv_match": "B — Fit CV / offre",
-        "C_level_strategy": "C — Niveau / stratégie",
-        "D_compensation": "D — Compensation",
-        "E_personalization": "E — Personnalisation",
-        "F_interview_prep": "F — Préparation entretien",
+        "A_role_summary": t["block_A"],
+        "B_cv_match": t["block_B"],
+        "C_level_strategy": t["block_C"],
+        "D_compensation": t["block_D"],
+        "E_personalization": t["block_E"],
+        "F_interview_prep": t["block_F"],
     }
 
     with get_session() as session:
@@ -335,6 +340,8 @@ def job_detail(
             "evaluation_blocks": evaluation_blocks,
             "archetype": archetype,
             "current_user": current_user,
+            "t": t,
+            "current_lang": get_ui_lang(current_user),
         },
     )
 
@@ -372,6 +379,8 @@ def settings_page(
             "profile_data": profile_data,
             "source_configs": source_configs,
             "stored_creds": stored_creds,
+            "t": get_t(current_user),
+            "current_lang": get_ui_lang(current_user),
         },
     )
 
@@ -389,11 +398,12 @@ def update_search_settings(
         if user is None:
             raise HTTPException(status_code=404)
         user.max_days_old = value  # type: ignore[assignment]
-    from fastapi.responses import Response as _Resp
+    t = get_t(current_user)
+    import json as _json
     resp = templates.TemplateResponse(
         request,
         "settings.html",
-        {"current_user": current_user, "saved": True},
+        {"current_user": current_user, "saved": True, "t": t, "current_lang": get_ui_lang(current_user)},
     )
-    resp.headers["X-Toast"] = '{"message":"Paramètres sauvegardés","type":"success"}'
+    resp.headers["X-Toast"] = _json.dumps({"message": t["toast_saved"], "type": "success"})
     return resp
