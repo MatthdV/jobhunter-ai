@@ -89,3 +89,8 @@ def _startup() -> None:
             logger.error("SQLite integrity_check FAILED: %s — DB may be corrupt", result)
         else:
             logger.info("SQLite integrity_check: ok")
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
