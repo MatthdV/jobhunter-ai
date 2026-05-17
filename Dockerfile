@@ -38,4 +38,6 @@ ENV DRY_RUN=true
 
 EXPOSE 8000
 
+EXPOSE 8000
+
 CMD ["python", "-m", "src.main", "--help"]
