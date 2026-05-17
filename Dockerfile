@@ -38,6 +38,4 @@ ENV DRY_RUN=true
 
 EXPOSE 8000
 
-EXPOSE 8000
-
-CMD ["python", "-m", "src.main", "--help"]
+CMD uvicorn src.api.app:app --host 0.0.0.0 --port $PORT
