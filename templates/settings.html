@@ -185,9 +185,12 @@
     </div>
     <div class="px-6 py-3 space-y-0" id="sources-section">
       {% for src_name, src_label, src_desc in [
-          ('wttj',     'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
-          ('indeed',   'Indeed',                'Playwright — offres internationales'),
-          ('linkedin', 'LinkedIn',              'Scraper Playwright — nécessite un compte LinkedIn'),
+          ('wttj',           'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
+          ('france_travail', 'France Travail',         'API officielle — offres FR uniquement, gratuit'),
+          ('adzuna',         'Adzuna',                 'API agrégateur — 19 pays (FR, GB, DE, US…)'),
+          ('arbeitsagentur', 'Arbeitsagentur',         'API officielle — offres DE uniquement, sans inscription'),
+          ('indeed',         'Indeed',                 'Playwright — offres internationales'),
+          ('linkedin',       'LinkedIn',               'Scraper Playwright — nécessite un compte LinkedIn'),
       ] %}
       {% set sc = source_configs.get(src_name, {}) %}
       <div class="border-b border-gray-50 last:border-0 py-3">
@@ -275,10 +278,14 @@
     </div>
     <div class="px-6 py-5 space-y-4">
       {% for field_name, field_label, field_hint in [
-          ('openrouter_api_key', 'OpenRouter API Key', 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
-          ('anthropic_api_key',  'Anthropic API Key',  'Optionnel — si vous préférez Claude directement.'),
-          ('wttj_email',         'WTTJ Email',         'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
-          ('wttj_password',      'WTTJ Mot de passe',  'Mot de passe Welcome to the Jungle.'),
+          ('openrouter_api_key',          'OpenRouter API Key',            'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
+          ('anthropic_api_key',           'Anthropic API Key',             'Optionnel — si vous préférez Claude directement.'),
+          ('wttj_email',                  'WTTJ Email',                    'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
+          ('wttj_password',               'WTTJ Mot de passe',             'Mot de passe Welcome to the Jungle.'),
+          ('france_travail_client_id',    'France Travail Client ID',      'Client ID de votre app France Travail (francetravail.io → Mes applications).'),
+          ('france_travail_client_secret','France Travail Client Secret',  'Secret généré à la création de l\'app France Travail.'),
+          ('adzuna_app_id',               'Adzuna App ID',                 'App ID depuis developer.adzuna.com (inscription gratuite).'),
+          ('adzuna_app_key',              'Adzuna App Key',                'App Key Adzuna.'),
       ] %}
       <div>
         <div class="flex items-center gap-2 mb-1">
