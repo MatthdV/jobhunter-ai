@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     france_travail_client_id: str = Field("", description="France Travail API client ID (from francetravail.io)")
     france_travail_client_secret: str = Field("", description="France Travail API client secret")
 
+    # --- Adzuna API ---
+    adzuna_app_id: str = Field("", description="Adzuna API app ID (from developer.adzuna.com, free)")
+    adzuna_app_key: str = Field("", description="Adzuna API app key")
+
     # --- Database ---
     database_url: str = Field("sqlite:///./jobhunter.db", description="SQLAlchemy database URL")
 
