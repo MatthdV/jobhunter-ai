@@ -234,3 +234,128 @@ def get_sources(current_user: User = Depends(get_current_user)) -> SourcesOut:
     raw_yaml = current_user.profile_yaml or ""
     profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
     return SourcesOut(active_sources=_get_active_sources(profile))
+
+
+# ---------------------------------------------------------------------------
+# Candidate profile (structured form → YAML)
+# ---------------------------------------------------------------------------
+
+
+class CandidateProfileIn(BaseModel):
+    name: str = ""
+    title: str = ""
+    experience_years: int | None = None
+    location: str = ""
+    salary_min: int | None = None
+    salary_max: int | None = None
+    tjm_min: int | None = None
+    tjm_max: int | None = None
+    skills: list[str] = []
+    excluded_keywords: list[str] = []
+
+
+@router.put("/profile/candidate")
+def update_candidate_profile(
+    body: CandidateProfileIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Update candidate.*  salary.*  skills.*  filters.* in profile YAML."""
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+
+    candidate = profile.setdefault("candidate", {})
+    if body.name:
+        candidate["name"] = body.name
+    if body.title:
+        candidate["title"] = body.title
+    if body.experience_years is not None:
+        candidate["experience_years"] = body.experience_years
+    if body.location:
+        candidate["location"] = body.location
+
+    salary = profile.setdefault("salary", {})
+    if body.salary_min is not None:
+        salary["min_annual"] = body.salary_min
+    if body.salary_max is not None:
+        salary["max_annual"] = body.salary_max
+    if body.tjm_min is not None:
+        salary["min_daily_rate"] = body.tjm_min
+    if body.tjm_max is not None:
+        salary["max_daily_rate"] = body.tjm_max
+    if body.salary_min is not None or body.salary_max is not None:
+        salary.setdefault("currency", "EUR")
+
+    if body.skills:
+        skills = profile.setdefault("skills", {})
+        skills["top_3"] = body.skills[:3]
+        if len(body.skills) > 3:
+            skills["additional"] = body.skills[3:]
+
+    if body.excluded_keywords:
+        filters = profile.setdefault("filters", {})
+        filters["excluded_keywords"] = body.excluded_keywords
+
+    updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = updated_yaml  # type: ignore[assignment]
+
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Per-source config (keywords / location / work_modes)
+# ---------------------------------------------------------------------------
+
+
+class SourceConfigIn(BaseModel):
+    source: str
+    keywords: list[str] = []
+    location: str = ""
+    work_modes: list[str] = []
+
+
+@router.put("/profile/source-config")
+def update_source_config(
+    body: SourceConfigIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Update keywords, location, work_modes for a given source in profile YAML."""
+    if body.source not in AVAILABLE_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown source '{body.source}'. Valid: {AVAILABLE_SOURCES}",
+        )
+
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+
+    sources: list[dict] = list(profile.get("job_sources", []))
+    existing = [s for s in sources if s.get("name") == body.source]
+
+    if not existing:
+        # Source not yet in YAML — create with defaults and apply config
+        entry: dict = {"name": body.source, **_DEFAULT_SOURCE_ENTRY}
+        sources.append(entry)
+        existing = [entry]
+
+    for s in existing:
+        if body.keywords:
+            s["search_terms"] = body.keywords
+        if body.location:
+            s["location"] = body.location
+        if body.work_modes:
+            s["work_modes"] = body.work_modes
+
+    profile["job_sources"] = sources
+    updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
+
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = updated_yaml  # type: ignore[assignment]
+
+    return {"ok": True, "source": body.source}

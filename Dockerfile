@@ -29,13 +29,13 @@ COPY templates/ templates/
 COPY alembic/ alembic/
 COPY alembic.ini .
 
-# Create volume mount points
+# Create data dirs (Railway Volume mounted at /data/db via dashboard)
 RUN mkdir -p /data/db /data/output
 
 # Default env
 ENV DATABASE_URL=sqlite:////data/db/jobhunter.db
 ENV DRY_RUN=true
 
-VOLUME ["/data/db", "/data/output"]
+EXPOSE 8000
 
 CMD ["python", "-m", "src.main", "--help"]
