@@ -111,14 +111,33 @@ class LinkedInScraper(BaseScraper):
         nav = await page.query_selector("#global-nav, .global-nav")
         return nav is not None
 
+    def _get_linkedin_credentials(self) -> tuple[str, str]:
+        """Return (email, password) from per-user encrypted store or global settings."""
+        from src.config.settings import settings as _settings
+        email = _settings.linkedin_email
+        password = _settings.linkedin_password
+        if self._user_id is not None:
+            try:
+                from src.api.user_settings import get_settings_for_user
+                from src.storage.database import get_session
+                from src.storage.models import User
+                with get_session() as session:
+                    user = session.get(User, self._user_id)
+                    if user:
+                        session.expunge(user)
+                        u_cfg = get_settings_for_user(user)
+                        email = u_cfg.get("linkedin_email") or email
+                        password = u_cfg.get("linkedin_password") or password
+            except Exception as exc:
+                logger.debug("LinkedIn: could not load per-user credentials: %s", exc)
+        return email, password
+
     def _has_credentials(self) -> bool:
-        from src.config.settings import settings
-        return bool(settings.linkedin_email) and bool(settings.linkedin_password)
+        email, password = self._get_linkedin_credentials()
+        return bool(email) and bool(password)
 
     async def _run_login(self, page: Page) -> None:
-        from src.config.settings import settings
-        email = settings.linkedin_email
-        password = settings.linkedin_password
+        email, password = self._get_linkedin_credentials()
 
         await page.goto("https://www.linkedin.com/login")
         await page.fill("#username", email)
