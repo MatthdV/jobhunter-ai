@@ -49,13 +49,30 @@ class IndeedApiScraper(BaseScraper):
 
     def __init__(self, headless: bool = True, api_key: str = "", user_id: int | None = None) -> None:
         super().__init__(headless=headless, user_id=user_id)
-        resolved_key = api_key or settings.indeed_api_key
+        resolved_key = api_key or self._get_indeed_api_key() or settings.indeed_api_key
         if not resolved_key:
             raise ConfigurationError(
                 "INDEED_API_KEY is not set — cannot initialise IndeedApiScraper"
             )
         self._api_key = resolved_key
         self._client: httpx.AsyncClient | None = None
+
+    def _get_indeed_api_key(self) -> str:
+        """Return per-user indeed_api_key from encrypted store, or empty string."""
+        if self._user_id is None:
+            return ""
+        try:
+            from src.api.user_settings import get_settings_for_user
+            from src.storage.database import get_session
+            from src.storage.models import User
+            with get_session() as session:
+                user = session.get(User, self._user_id)
+                if user:
+                    session.expunge(user)
+                    return get_settings_for_user(user).get("indeed_api_key") or ""
+        except Exception as exc:
+            logger.debug("Indeed: could not load per-user credentials: %s", exc)
+        return ""
 
     # ------------------------------------------------------------------
     # Lifecycle

@@ -24,7 +24,8 @@ def get_indeed_scraper(user_id: int | None = None) -> IndeedScraper | IndeedApiS
     fresh = Settings()  # type: ignore[call-arg]
     if fresh.indeed_mode == "playwright":
         return IndeedScraper(user_id=user_id)
-    return IndeedApiScraper(api_key=fresh.indeed_api_key, user_id=user_id)
+    # Pass empty api_key — IndeedApiScraper resolves per-user key in __init__
+    return IndeedApiScraper(api_key="", user_id=user_id)
 
 
 __all__ = [
