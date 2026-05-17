@@ -183,7 +183,10 @@ class LinkedInScraper(BaseScraper):
         country_code: str = "FR",
     ) -> list[Any]:
         """Fetch jobs from LinkedIn two-pane search: click each card, read detail."""
-        import asyncio as _aio
+        logger.warning("LinkedIn scraper disabled — ToS compliance. Use WTTJ or France Travail.")
+        return []
+
+        import asyncio as _aio  # noqa: F401  (unreachable, kept for reference)
 
         assert self._context is not None, "_setup() must be called first"
 
