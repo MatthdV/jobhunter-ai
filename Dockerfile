@@ -38,4 +38,6 @@ ENV DRY_RUN=true
 
 VOLUME ["/data/db", "/data/output"]
 
+EXPOSE 8000
+
 CMD ["python", "-m", "src.main", "--help"]
