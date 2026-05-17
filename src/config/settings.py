@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     indeed_api_key: str = Field("", description="RapidAPI key for JSearch (Indeed) API")
     indeed_mode: str = Field("api", description='Indeed scraper backend: "api" | "playwright"')
 
+    # --- France Travail API ---
+    france_travail_client_id: str = Field("", description="France Travail API client ID (from francetravail.io)")
+    france_travail_client_secret: str = Field("", description="France Travail API client secret")
+
     # --- Database ---
     database_url: str = Field("sqlite:///./jobhunter.db", description="SQLAlchemy database URL")
 
