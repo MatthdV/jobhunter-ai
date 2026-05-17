@@ -66,6 +66,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "section_application": "Candidature",
         "no_description": "Pas de description disponible.",
 
+        # Dashboard
+        "dashboard_subtitle": "Vue d'ensemble de votre pipeline de recherche d'emploi.",
+
         # Settings
         "settings_title": "Paramètres de recherche",
         "settings_subtitle": "Configure les sources, mots-clés et filtres du scanner.",
@@ -196,6 +199,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "section_application": "Application",
         "no_description": "No description available.",
 
+        # Dashboard
+        "dashboard_subtitle": "Overview of your job search pipeline.",
+
         # Settings
         "settings_title": "Search settings",
         "settings_subtitle": "Configure sources, keywords and filters for the scanner.",
@@ -325,6 +331,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "section_evaluation": "Evaluación IA",
         "section_application": "Candidatura",
         "no_description": "Sin descripción disponible.",
+
+        # Dashboard
+        "dashboard_subtitle": "Vista general de tu pipeline de búsqueda de empleo.",
 
         # Settings
         "settings_title": "Configuración de búsqueda",
