@@ -172,15 +172,20 @@ class WTTJScraper(BaseScraper):
         try:
             await self._wait()
             await page.goto(url)
-            # Accept GDPR cookie consent banner (appears on every new browser context)
+            logger.debug("WTTJ: landed on %s", page.url)
+            # Accept GDPR cookie consent banner if still present (shouldn't be after login)
             try:
                 btn = page.locator("button:has-text('OK pour moi')")
-                await btn.wait_for(timeout=5000)
+                await btn.wait_for(timeout=3000)
                 await btn.click()
                 logger.debug("WTTJ: accepted cookie consent")
             except Exception:
-                pass  # banner not present or already accepted
+                pass
             await page.wait_for_load_state("networkidle")
+            # Next.js SPA: React hydrates and fires XHR *after* networkidle.
+            # Wait an extra 5s to capture api/v3/search/jobs response.
+            await page.wait_for_timeout(5000)
+            logger.debug("WTTJ: collected %d raw hits for %s", len(collected), keywords)
         except Exception as exc:
             logger.warning("WTTJ page load failed: %s", exc)
         finally:
