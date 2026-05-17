@@ -8,16 +8,16 @@
   <!-- Page header -->
   <div>
     <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-    <p class="text-sm text-gray-500 mt-1">Vue d'ensemble du pipeline de recherche d'emploi</p>
+    <p class="text-sm text-gray-500 mt-1">{{ t.settings_subtitle if t else "Vue d'ensemble du pipeline de recherche d'emploi" }}</p>
   </div>
 
   <!-- ===== Section 1 : Stats bar ===== -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
     {% set stat_items = [
-      ("Scannées",  stats.total.scanned,  stats.today.scanned,  "📥", "indigo"),
-      ("Matchées",  stats.total.matched,  stats.today.matched,  "⭐", "blue"),
-      ("Appliquées",stats.total.applied,  stats.today.applied,  "📤", "green"),
-      ("Réponses",  stats.total.replied,  stats.today.replied,  "💬", "purple"),
+      (t.stat_scanned if t else "Scannées",  stats.total.scanned,  stats.today.scanned,  "📥", "indigo"),
+      (t.stat_matched if t else "Matchées",  stats.total.matched,  stats.today.matched,  "⭐", "blue"),
+      (t.stat_applied if t else "Appliquées",stats.total.applied,  stats.today.applied,  "📤", "green"),
+      (t.stat_replied if t else "Réponses",  stats.total.replied,  stats.today.replied,  "💬", "purple"),
     ] %}
     {% for label, total, today, icon, color in stat_items %}
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col gap-2">
@@ -27,7 +27,7 @@
       </div>
       <div class="text-3xl font-bold text-gray-900">{{ total }}</div>
       <div class="text-xs text-gray-400">
-        aujourd'hui :
+        {{ t.stat_today if t else "aujourd'hui" }} :
         <span class="font-semibold text-{{ color }}-600">+{{ today }}</span>
       </div>
     </div>
@@ -36,7 +36,7 @@
 
   <!-- ===== Section 2 : Pipeline controls ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Contrôles pipeline</h2>
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">{{ t.section_pipeline if t else "Contrôles pipeline" }}</h2>
 
     <!-- Pipeline status — polled every 3s via HTMX (innerHTML swap keeps outer div attrs) -->
     <div id="pipeline-status"
@@ -52,10 +52,10 @@
 
     <!-- Filter tabs -->
     <div class="border-b border-gray-200 px-6 pt-5 pb-0 flex items-center justify-between flex-wrap gap-3">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Offres</h2>
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">{{ t.section_jobs if t else "Offres" }}</h2>
       <div class="flex gap-1 flex-wrap" id="status-tabs">
         {% set filters = [
-          ("all",     "Tous"),
+          ("all",     t.filter_all if t else "Tous"),
           ("new",     "NEW"),
           ("matched", "MATCHED"),
           ("applied", "APPLIED"),
@@ -89,20 +89,20 @@
       {% include "partials/_jobs_rows.html" ignore missing %}
 
       {% if not jobs %}
-      <div class="py-16 text-center text-gray-400 text-sm">Aucune offre trouvée.</div>
+      <div class="py-16 text-center text-gray-400 text-sm">{{ t.jobs_empty if t else "Aucune offre trouvée." }}</div>
       {% else %}
       <table class="min-w-full divide-y divide-gray-100 text-sm">
         <thead>
           <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            <th class="px-4 py-3">Titre</th>
-            <th class="px-4 py-3">Entreprise</th>
-            <th class="px-4 py-3">Source</th>
-            <th class="px-4 py-3">Score</th>
-            <th class="px-4 py-3">Salaire</th>
-            <th class="px-4 py-3">Remote</th>
-            <th class="px-4 py-3">Status</th>
-            <th class="px-4 py-3">Date</th>
-            <th class="px-4 py-3">Actions</th>
+            <th class="px-4 py-3">{{ t.col_title if t else "Titre" }}</th>
+            <th class="px-4 py-3">{{ t.col_company if t else "Entreprise" }}</th>
+            <th class="px-4 py-3">{{ t.col_source if t else "Source" }}</th>
+            <th class="px-4 py-3">{{ t.col_score if t else "Score" }}</th>
+            <th class="px-4 py-3">{{ t.col_salary if t else "Salaire" }}</th>
+            <th class="px-4 py-3">{{ t.col_remote if t else "Remote" }}</th>
+            <th class="px-4 py-3">{{ t.col_status if t else "Status" }}</th>
+            <th class="px-4 py-3">{{ t.col_date if t else "Date" }}</th>
+            <th class="px-4 py-3">{{ t.col_actions if t else "Actions" }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-50">
@@ -146,7 +146,7 @@
               {% if job.is_remote %}
               <span class="px-2 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-700">Remote</span>
               {% else %}
-              <span class="text-gray-300 text-xs">Présentiel</span>
+              <span class="text-gray-300 text-xs">{{ t.job_onsite if t else "Présentiel" }}</span>
               {% endif %}
             </td>
             <td class="px-4 py-3">
@@ -162,7 +162,7 @@
               <div class="flex items-center gap-2 whitespace-nowrap">
                 <a href="/jobs/{{ job.id }}"
                    class="text-indigo-600 hover:text-indigo-800 text-xs font-semibold transition-colors">
-                  Voir →
+                  {{ t.job_see if t else "Voir →" }}
                 </a>
                 {% if job.status in ("new", "matched") %}
                 <button
@@ -170,9 +170,9 @@
                   hx-vals='{"status": "skipped"}'
                   hx-target="closest tr"
                   hx-swap="outerHTML"
-                  hx-confirm="Passer cette offre ?"
+                  hx-confirm="{{ t.job_confirm_skip if t else 'Passer cette offre ?' }}"
                   class="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
-                  title="Passer">
+                  title="{{ t.job_skip if t else 'Passer' }}">
                   ✕
                 </button>
                 {% endif %}
@@ -204,7 +204,7 @@
             hx-target="#jobs-table"
             hx-swap="innerHTML"
             class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
-            ← Précédent
+            {{ t.pagination_prev if t else "← Précédent" }}
           </button>
           {% endif %}
           {% if jobs | length == 50 %}
@@ -213,7 +213,7 @@
             hx-target="#jobs-table"
             hx-swap="innerHTML"
             class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
-            Suivant →
+            {{ t.pagination_next if t else "Suivant →" }}
           </button>
           {% endif %}
         </div>

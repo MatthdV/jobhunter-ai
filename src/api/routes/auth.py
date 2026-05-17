@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
+from src.api.i18n import TRANSLATIONS
 from src.api.security import (
     create_access_token,
     hash_password,
@@ -47,13 +48,13 @@ def _set_auth_cookie(response: RedirectResponse, token: str) -> None:
 
 def login_page(request: Request, error: str | None = None) -> HTMLResponse:
     return _templates.TemplateResponse(
-        request, "login.html", {"error": error}
+        request, "login.html", {"error": error, "t": TRANSLATIONS["fr"], "current_lang": "fr"}
     )
 
 
 def register_page(request: Request, error: str | None = None) -> HTMLResponse:
     return _templates.TemplateResponse(
-        request, "register.html", {"error": error}
+        request, "register.html", {"error": error, "t": TRANSLATIONS["fr"], "current_lang": "fr"}
     )
 
 

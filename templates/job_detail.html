@@ -11,7 +11,7 @@
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
     </svg>
-    Dashboard
+    {{ t.back_dashboard if t else "Dashboard" }}
   </a>
 
   <!-- ===== Section 1 : Header ===== -->
@@ -20,14 +20,14 @@
       <div class="flex-1 min-w-0">
         <h1 class="text-2xl font-bold text-gray-900 leading-tight">{{ job.title }}</h1>
         <p class="mt-1 text-base text-gray-600 font-medium">
-          {{ job.company.name if job.company else "Entreprise inconnue" }}
+          {{ job.company.name if job.company else (t.job_unknown_company if t else "Entreprise inconnue") }}
         </p>
       </div>
       <!-- External link -->
       {% if job.url %}
       <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer"
          class="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-indigo-200 text-indigo-600 text-sm font-semibold hover:bg-indigo-50 transition-colors">
-        Voir l'offre
+        {{ t.job_view_offer if t else "Voir l'offre" }}
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
@@ -79,7 +79,7 @@
   <!-- ===== Section 2 : Score ===== -->
   {% if job.match_score is not none %}
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Score de matching</h2>
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">{{ t.section_score if t else "Score de matching" }}</h2>
     {% set score = job.match_score | int %}
     <div class="flex items-center gap-4">
       <div class="flex-1">
@@ -99,9 +99,9 @@
       </span>
     </div>
     <p class="text-xs text-gray-400 mt-2">
-      {% if score >= 80 %}Excellent match — priorité haute
-      {% elif score >= 60 %}Bon match — à considérer
-      {% else %}Match faible — à review manuel{% endif %}
+      {% if score >= 80 %}{{ t.score_excellent if t else "Excellent match — priorité haute" }}
+      {% elif score >= 60 %}{{ t.score_good if t else "Bon match — à considérer" }}
+      {% else %}{{ t.score_weak if t else "Match faible — à review manuel" }}{% endif %}
     </p>
   </div>
   {% endif %}
@@ -110,7 +110,7 @@
   {% if evaluation_blocks %}
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Évaluation détaillée</h2>
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">{{ t.section_evaluation_detailed if t else "Évaluation détaillée" }}</h2>
       {% if archetype %}
       <span class="px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
         {{ archetype }}
@@ -165,7 +165,7 @@
   <!-- ===== Section 3 : Description ===== -->
   {% if job.description %}
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Description du poste</h2>
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">{{ t.section_description if t else "Description du poste" }}</h2>
     <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-line max-h-72 overflow-y-auto pr-2 scroll-smooth">
       {{ job.description }}
     </div>
@@ -177,7 +177,7 @@
   {% set app = job.application %}
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
     <div class="flex items-center justify-between">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Candidature</h2>
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">{{ t.section_application if t else "Candidature" }}</h2>
       {% set app_st = (app.status or 'draft') | lower %}
       <span class="status-chip status-{{ app_st }}">
         {{ app_st | upper }}
@@ -188,7 +188,7 @@
     {% if app.cover_letter %}
     <div>
       <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        Lettre de motivation
+        {{ t.cover_letter_label if t else "Lettre de motivation" }}
       </label>
       <textarea readonly rows="8"
         class="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 resize-none focus:outline-none font-mono leading-relaxed">{{ app.cover_letter }}</textarea>
@@ -204,7 +204,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
         </svg>
-        Télécharger le CV (PDF)
+        {{ t.cv_download if t else "Télécharger le CV (PDF)" }}
       </a>
       {% endif %}
       {% if app.submitted_at %}
@@ -223,12 +223,12 @@
 
   <!-- ===== Section 5 : Timeline status ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-5">Progression</h2>
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-5">{{ t.section_progress if t else "Progression" }}</h2>
     {% set steps = [
-      ("new",     "Découverte",  "Offre scrapée et enregistrée"),
-      ("matched", "Matching",    "Score IA calculé"),
-      ("applied", "Candidature", "CV + lettre envoyés"),
-      ("replied", "Réponse",     "Réponse reçue"),
+      ("new",     t.step_new_label if t else "Découverte",  t.step_new_desc if t else "Offre scrapée et enregistrée"),
+      ("matched", t.step_matched_label if t else "Matching",    t.step_matched_desc if t else "Score IA calculé"),
+      ("applied", t.step_applied_label if t else "Candidature", t.step_applied_desc if t else "CV + lettre envoyés"),
+      ("replied", t.step_replied_label if t else "Réponse",     t.step_replied_desc if t else "Réponse reçue"),
     ] %}
     {% set current_status = (job.status or 'new') | lower %}
     {% set status_order = {"new": 0, "matched": 1, "applied": 2, "replied": 3} %}

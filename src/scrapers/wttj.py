@@ -114,6 +114,14 @@ class WTTJScraper(BaseScraper):
         try:
             await self._wait()
             await page.goto(url)
+            # Accept GDPR cookie consent banner (appears on every new browser context)
+            try:
+                btn = page.locator("button:has-text('OK pour moi')")
+                await btn.wait_for(timeout=5000)
+                await btn.click()
+                logger.debug("WTTJ: accepted cookie consent")
+            except Exception:
+                pass  # banner not present or already accepted
             await page.wait_for_load_state("networkidle")
         except Exception as exc:
             logger.warning("WTTJ page load failed: %s", exc)

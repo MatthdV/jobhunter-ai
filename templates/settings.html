@@ -5,15 +5,15 @@
 <div class="max-w-2xl mx-auto space-y-8">
 
   <div>
-    <h1 class="text-2xl font-bold text-gray-900">Paramètres</h1>
-    <p class="text-sm text-gray-500 mt-1">Configurer votre profil et votre recherche.</p>
+    <h1 class="text-2xl font-bold text-gray-900">{{ t.settings_title if t else "Paramètres" }}</h1>
+    <p class="text-sm text-gray-500 mt-1">{{ t.settings_subtitle if t else "Configurer votre profil et votre recherche." }}</p>
   </div>
 
   <!-- ===== Mon profil ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="text-base font-semibold text-gray-800">Mon profil</h2>
-      <p class="text-xs text-gray-400 mt-0.5">Utilisé par l&apos;IA pour scorer les offres selon votre expérience.</p>
+      <h2 class="text-base font-semibold text-gray-800">{{ t.section_profile if t else "Mon profil" }}</h2>
+      <p class="text-xs text-gray-400 mt-0.5">{{ t.profile_subtitle if t else "Utilisé par l'IA pour scorer les offres selon votre expérience." }}</p>
     </div>
     <div class="px-6 py-5 space-y-4">
       {% set cand = profile_data.get('candidate', {}) %}
@@ -131,7 +131,7 @@
         <button onclick="saveProfile()"
                 class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
                        hover:bg-indigo-700 transition-colors">
-          Sauvegarder le profil
+          {{ t.btn_save_profile if t else "Sauvegarder le profil" }}
         </button>
       </div>
     </div>
@@ -180,8 +180,8 @@
   <!-- ===== Sources actives ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="text-base font-semibold text-gray-800">Sources actives</h2>
-      <p class="text-xs text-gray-400 mt-0.5">Activez une source puis configurez vos mots-clés et localisation.</p>
+      <h2 class="text-base font-semibold text-gray-800">{{ t.sources_title if t else "Sources actives" }}</h2>
+      <p class="text-xs text-gray-400 mt-0.5">{{ t.sources_subtitle if t else "Activez une source puis configurez vos mots-clés et localisation." }}</p>
     </div>
     <div class="px-6 py-3 space-y-0" id="sources-section">
       {% for src_name, src_label, src_desc in [
@@ -258,7 +258,7 @@
             <button onclick="saveSourceConfig('{{ src_name }}')"
                     class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg
                            hover:bg-indigo-700 transition-colors">
-              Sauvegarder
+              {{ t.btn_save if t else "Sauvegarder" }}
             </button>
           </div>
         </div>
@@ -270,8 +270,8 @@
   <!-- ===== Clés API ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="text-base font-semibold text-gray-800">Clés API</h2>
-      <p class="text-xs text-gray-400 mt-0.5">Chiffrées côté serveur — jamais stockées en clair.</p>
+      <h2 class="text-base font-semibold text-gray-800">{{ t.api_keys_title if t else "Clés API" }}</h2>
+      <p class="text-xs text-gray-400 mt-0.5">{{ t.api_keys_subtitle if t else "Chiffrées côté serveur — jamais stockées en clair." }}</p>
     </div>
     <div class="px-6 py-5 space-y-4">
       {% for field_name, field_label, field_hint in [
@@ -283,11 +283,11 @@
           <label class="text-xs font-medium text-gray-600">{{ field_label }}</label>
           {% if field_name in stored_creds %}
           <span class="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>Configurée
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>{{ t.configured_label if t else "Configurée" }}
           </span>
           {% else %}
           <span class="inline-flex items-center gap-1 text-xs text-gray-400">
-            <span class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>Non configurée
+            <span class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>{{ t.not_configured_label if t else "Non configurée" }}
           </span>
           {% endif %}
         </div>
@@ -304,7 +304,7 @@
         <button onclick="saveCredentials()"
                 class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
                        hover:bg-indigo-700 transition-colors">
-          Sauvegarder les clés
+          {{ t.btn_save_keys if t else "Sauvegarder les clés" }}
         </button>
       </div>
     </div>
@@ -314,8 +314,8 @@
   <details class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <summary class="px-6 py-4 cursor-pointer select-none flex items-center justify-between
                     text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors list-none">
-      <span>Mode avancé — Profil YAML complet</span>
-      <span class="text-gray-400 text-xs">Cliquer pour déplier</span>
+      <span>{{ t.advanced_mode_label if t else "Mode avancé — Profil YAML complet" }}</span>
+      <span class="text-gray-400 text-xs">{{ t.advanced_mode_click if t else "Cliquer pour déplier" }}</span>
     </summary>
     <div class="px-6 py-5 space-y-4 border-t border-gray-100">
       <p class="text-xs text-gray-400">Édition directe du YAML. Pour les utilisateurs avancés.</p>
@@ -327,12 +327,12 @@
         <button onclick="loadYaml()"
                 class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
                        hover:bg-gray-200 transition-colors">
-          Recharger
+          {{ t.btn_reload if t else "Recharger" }}
         </button>
         <button onclick="saveYaml()"
                 class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
                        hover:bg-indigo-700 transition-colors">
-          Sauvegarder YAML
+          {{ t.btn_save_yaml if t else "Sauvegarder YAML" }}
         </button>
       </div>
     </div>

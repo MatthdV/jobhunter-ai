@@ -40,7 +40,7 @@
     {% if job.is_remote %}
     <span class="px-2 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-700">Remote</span>
     {% else %}
-    <span class="text-gray-300 text-xs">Présentiel</span>
+    <span class="text-gray-300 text-xs">{{ t.job_onsite if t else "Présentiel" }}</span>
     {% endif %}
   </td>
   <td class="px-4 py-3">
@@ -56,7 +56,7 @@
     <div class="flex items-center gap-2 whitespace-nowrap">
       <a href="/jobs/{{ job.id }}"
          class="text-indigo-600 hover:text-indigo-800 text-xs font-semibold transition-colors">
-        Voir →
+        {{ t.job_see if t else "Voir →" }}
       </a>
       {% if job.status in ("new", "matched") %}
       <button
@@ -64,9 +64,9 @@
         hx-vals='{"status": "skipped"}'
         hx-target="closest tr"
         hx-swap="outerHTML"
-        hx-confirm="Passer cette offre ?"
+        hx-confirm="{{ t.job_confirm_skip if t else 'Passer cette offre ?' }}"
         class="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
-        title="Passer">
+        title="{{ t.job_skip if t else 'Passer' }}">
         ✕
       </button>
       {% endif %}
@@ -77,7 +77,7 @@
         hx-target="closest tr"
         hx-swap="outerHTML"
         class="text-xs text-gray-400 hover:text-green-600 transition-colors font-medium"
-        title="Approuver manuellement">
+        title="{{ t.job_approve if t else 'Approuver manuellement' }}">
         ✓
       </button>
       {% endif %}

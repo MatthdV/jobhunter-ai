@@ -7,7 +7,7 @@ services:
     volumes:
       - db_data:/data/db
       - ./data/output:/data/output
-      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
+      - ${PROFILE_DIR:-./profiles/matthieu-devillele}:/profile:ro
     environment:
       - DATABASE_URL=sqlite:////data/db/jobhunter.db
       - PROFILE_PATH=/profile/profile.yaml
@@ -22,7 +22,7 @@ services:
     volumes:
       - db_data:/data/db
       - ./data/output:/data/output
-      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
+      - ${PROFILE_DIR:-./profiles/matthieu-devillele}:/profile:ro
       - ./static:/app/static
       - ./templates:/app/templates
     environment:
@@ -41,15 +41,16 @@ services:
     volumes:
       - db_data:/data/db
       - ./data/output:/data/output
-      - ${PROFILE_DIR:-./profiles/default}:/profile:ro
+      - ${PROFILE_DIR:-./profiles/matthieu-devillele}:/profile:ro
       - ./cron/jobhunter-cron:/etc/cron.d/jobhunter-cron:ro
     environment:
       - DATABASE_URL=sqlite:////data/db/jobhunter.db
       - PROFILE_PATH=/profile/profile.yaml
     restart: unless-stopped
     command: >
-      sh -c "chmod 0644 /etc/cron.d/jobhunter-cron
-      && crontab /etc/cron.d/jobhunter-cron
+      sh -c "cp /etc/cron.d/jobhunter-cron /tmp/jobhunter-cron
+      && chmod 0644 /tmp/jobhunter-cron
+      && crontab /tmp/jobhunter-cron
       && cron -f"
 
 volumes:

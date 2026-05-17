@@ -359,3 +359,40 @@ def update_source_config(
         user.profile_yaml = updated_yaml  # type: ignore[assignment]
 
     return {"ok": True, "source": body.source}
+
+
+# ---------------------------------------------------------------------------
+# UI language preference
+# ---------------------------------------------------------------------------
+
+_SUPPORTED_LANGS = {"fr", "en", "es"}
+
+
+class LangIn(BaseModel):
+    language: str
+
+
+@router.put("/profile/language")
+def set_language(
+    body: LangIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Update ui.language in profile YAML."""
+    if body.language not in _SUPPORTED_LANGS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported language '{body.language}'. Valid: {sorted(_SUPPORTED_LANGS)}",
+        )
+
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+    profile.setdefault("ui", {})["language"] = body.language
+    updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
+
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = updated_yaml  # type: ignore[assignment]
+
+    return {"ok": True, "language": body.language}
