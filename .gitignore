@@ -74,3 +74,4 @@ data/digest_*.html
 data/notes/
 *.db.corrupt
 web/
+.gstack/
