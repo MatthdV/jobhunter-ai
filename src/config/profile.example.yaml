@@ -76,6 +76,27 @@ job_sources:
     work_modes: [remote]
     auto_translate: false
 
+  - name: france_travail              # official French job board API (FR only, free)
+    enabled: true
+    search_terms: [automation engineer, python developer]
+    location: Paris
+    countries: [FR]
+    work_modes: [remote, hybrid]
+
+  - name: adzuna                      # global aggregator (19 countries, free tier)
+    enabled: true
+    search_terms: [automation engineer, python developer]
+    location: ""
+    countries: [FR, GB, DE, NL, US]
+    work_modes: [remote]
+
+  - name: arbeitsagentur              # German federal jobs agency (DE only, no auth needed)
+    enabled: true
+    search_terms: [automation engineer, python developer]
+    location: Berlin
+    countries: [DE]
+    work_modes: [remote, hybrid]
+
 # ---------------------------------------------------------------------------
 # Search keywords — used by scrapers
 # ---------------------------------------------------------------------------

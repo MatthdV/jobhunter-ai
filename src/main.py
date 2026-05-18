@@ -56,6 +56,9 @@ def scan(
 
     _scraper_map = {
         "wttj": "src.scrapers.wttj.WTTJScraper",
+        "france_travail": "src.scrapers.france_travail.FranceTravailScraper",
+        "adzuna": "src.scrapers.adzuna.AdzunaScraper",
+        "arbeitsagentur": "src.scrapers.arbeitsagentur.ArbeitsagenturScraper",
         "indeed": "src.scrapers.indeed.IndeedScraper",
         "indeed_api": "src.scrapers.indeed_api.IndeedApiScraper",
         "linkedin": "src.scrapers.linkedin.LinkedInScraper",

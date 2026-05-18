@@ -29,6 +29,10 @@ _CREDENTIAL_FIELDS = (
     "wttj_email",
     "wttj_password",
     "indeed_api_key",
+    "france_travail_client_id",
+    "france_travail_client_secret",
+    "adzuna_app_id",
+    "adzuna_app_key",
 )
 
 

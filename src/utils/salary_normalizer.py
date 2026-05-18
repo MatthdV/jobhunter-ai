@@ -18,16 +18,30 @@ class CountryConfig:
 
 
 COUNTRY_DATA: dict[str, CountryConfig] = {
-    "FR": CountryConfig("EUR", 1.0, 1.0, "fr", "FR", ["wttj", "indeed_api", "indeed", "linkedin"]),
-    "US": CountryConfig("USD", 0.92, 0.85, "us", "US", ["indeed_api", "indeed", "linkedin"]),
-    "GB": CountryConfig("GBP", 1.17, 0.95, "co.uk", "GB", ["indeed_api", "indeed", "linkedin"]),
-    "DE": CountryConfig("EUR", 1.0, 0.95, "de", "DE", ["indeed_api", "indeed", "linkedin"]),
-    "NL": CountryConfig("EUR", 1.0, 0.97, "nl", "NL", ["indeed_api", "indeed", "linkedin"]),
-    "CH": CountryConfig("CHF", 0.97, 0.65, "ch", "CH", ["indeed_api", "indeed", "linkedin"]),
-    "ES": CountryConfig("EUR", 1.0, 1.15, "es", "ES", ["indeed_api", "indeed", "linkedin"]),
-    "BE": CountryConfig("EUR", 1.0, 0.98, "be", "BE", ["indeed_api", "indeed", "linkedin"]),
-    "CA": CountryConfig("CAD", 0.68, 0.88, "ca", "CA", ["indeed_api", "indeed", "linkedin"]),
-    "SE": CountryConfig("SEK", 0.088, 0.82, "se", "SE", ["indeed_api", "indeed", "linkedin"]),
+    # Europe — FR/DE have dedicated official API scrapers
+    "FR": CountryConfig("EUR", 1.0, 1.0, "fr", "FR", ["wttj", "france_travail", "adzuna", "indeed_api", "linkedin"]),
+    "DE": CountryConfig("EUR", 1.0, 0.95, "de", "DE", ["arbeitsagentur", "adzuna", "indeed_api", "linkedin"]),
+    "GB": CountryConfig("GBP", 1.17, 0.95, "co.uk", "GB", ["adzuna", "indeed_api", "linkedin"]),
+    "NL": CountryConfig("EUR", 1.0, 0.97, "nl", "NL", ["adzuna", "indeed_api", "linkedin"]),
+    "CH": CountryConfig("CHF", 0.97, 0.65, "ch", "CH", ["adzuna", "indeed_api", "linkedin"]),
+    "ES": CountryConfig("EUR", 1.0, 1.15, "es", "ES", ["adzuna", "indeed_api", "linkedin"]),
+    "BE": CountryConfig("EUR", 1.0, 0.98, "be", "BE", ["adzuna", "indeed_api", "linkedin"]),
+    "SE": CountryConfig("SEK", 0.088, 0.82, "se", "SE", ["adzuna", "indeed_api", "linkedin"]),
+    "IT": CountryConfig("EUR", 1.0, 1.05, "it", "IT", ["adzuna"]),
+    "AT": CountryConfig("EUR", 1.0, 0.92, "at", "AT", ["adzuna"]),
+    "PL": CountryConfig("PLN", 0.23, 1.35, "pl", "PL", ["adzuna"]),
+    # North America
+    "US": CountryConfig("USD", 0.92, 0.85, "us", "US", ["adzuna", "indeed_api", "linkedin"]),
+    "CA": CountryConfig("CAD", 0.68, 0.88, "ca", "CA", ["adzuna", "indeed_api", "linkedin"]),
+    # Asia-Pacific
+    "AU": CountryConfig("AUD", 0.60, 0.82, "com.au", "AU", ["adzuna"]),
+    "NZ": CountryConfig("NZD", 0.56, 0.88, "co.nz", "NZ", ["adzuna"]),
+    "SG": CountryConfig("SGD", 0.70, 0.72, "sg", "SG", ["adzuna"]),
+    "IN": CountryConfig("INR", 0.011, 2.10, "co.in", "IN", ["adzuna"]),
+    # Africa
+    "ZA": CountryConfig("ZAR", 0.050, 1.80, "co.za", "ZA", ["adzuna"]),
+    # South America
+    "BR": CountryConfig("BRL", 0.18, 1.55, "com.br", "BR", ["adzuna"]),
 }
 
 
