@@ -57,12 +57,24 @@ class TestGetSupportedCountries:
         supported = get_supported_countries("wttj")
         assert supported == ["FR"]
 
-    def test_indeed_api_all_countries(self) -> None:
+    def test_indeed_api_countries(self) -> None:
+        # indeed_api is no longer the universal fallback — Adzuna now covers
+        # most countries. indeed_api remains listed for FR/DE/GB/NL/US/CA/CH/ES/BE/SE.
         supported = get_supported_countries("indeed_api")
         assert "FR" in supported
         assert "US" in supported
         assert "GB" in supported
+        # Adzuna-only countries (AU, NZ, IT, AT, PL, SG, IN, ZA, BR) should NOT list indeed_api
+        assert "AU" not in supported
+        assert "IT" not in supported
+
+    def test_adzuna_all_countries(self) -> None:
+        supported = get_supported_countries("adzuna")
         assert len(supported) == len(COUNTRY_DATA)
+        assert "FR" in supported
+        assert "US" in supported
+        assert "DE" in supported
+        assert "AU" in supported
 
     def test_linkedin_all_countries(self) -> None:
         supported = get_supported_countries("linkedin")

@@ -33,6 +33,10 @@ _SOURCE_NAME_MAP = {
     "welcome_to_the_jungle": "wttj",
     "wttj": "wttj",
     "indeed": "indeed",
+    "indeed_api": "indeed_api",
+    "france_travail": "france_travail",
+    "adzuna": "adzuna",
+    "arbeitsagentur": "arbeitsagentur",
     "linkedin": "linkedin",
 }
 
@@ -113,14 +117,27 @@ async def _run_scan(user_id: int) -> None:
                 if source_key == "wttj":
                     from src.scrapers.wttj import WTTJScraper
                     scraper = WTTJScraper(user_id=user_id)
-                elif source_key == "indeed":
+                elif source_key in ("indeed", "indeed_api"):
                     from src.scrapers import get_indeed_scraper
                     scraper = get_indeed_scraper(user_id=user_id)
+                elif source_key == "france_travail":
+                    from src.scrapers.france_travail import FranceTravailScraper
+                    scraper = FranceTravailScraper(user_id=user_id)
+                elif source_key == "adzuna":
+                    from src.scrapers.adzuna import AdzunaScraper
+                    scraper = AdzunaScraper(user_id=user_id)
+                elif source_key == "arbeitsagentur":
+                    from src.scrapers.arbeitsagentur import ArbeitsagenturScraper
+                    scraper = ArbeitsagenturScraper(user_id=user_id)
                 elif source_key == "linkedin":
                     from src.scrapers.linkedin import LinkedInScraper
                     scraper = LinkedInScraper(user_id=user_id)
             except Exception as exc:
                 logger.warning("Could not load scraper for %r: %s", source_key, exc)
+                continue
+
+            if scraper is None:
+                logger.warning("No scraper instantiated for source_key=%r, skipping", source_key)
                 continue
 
             from src.scrapers.filters import ScraperFilters
