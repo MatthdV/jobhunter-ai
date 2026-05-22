@@ -151,33 +151,56 @@ async def _run_scan(user_id: int) -> None:
                 )
                 continue
 
-            scraper = None
+            # Validate source_key loads before iterating work_modes
             try:
                 if source_key == "wttj":
-                    from src.scrapers.wttj import WTTJScraper
-                    scraper = WTTJScraper(user_id=user_id)
+                    from src.scrapers.wttj import WTTJScraper as _SC  # noqa: F401
                 elif source_key == "indeed":
-                    from src.scrapers import get_indeed_scraper
-                    scraper = get_indeed_scraper(user_id=user_id)
+                    from src.scrapers import get_indeed_scraper as _SC  # noqa: F401
                 elif source_key == "indeed_api":
-                    from src.scrapers.indeed_api import IndeedApiScraper
-                    scraper = IndeedApiScraper(user_id=user_id)
+                    from src.scrapers.indeed_api import IndeedApiScraper as _SC  # noqa: F401
                 elif source_key == "linkedin":
-                    from src.scrapers.linkedin import LinkedInScraper
-                    scraper = LinkedInScraper(user_id=user_id)
+                    from src.scrapers.linkedin import LinkedInScraper as _SC  # noqa: F401
                 elif source_key == "adzuna":
-                    from src.scrapers.adzuna import AdzunaScraper
-                    scraper = AdzunaScraper(user_id=user_id)
+                    from src.scrapers.adzuna import AdzunaScraper as _SC  # noqa: F401
                 elif source_key == "france_travail":
-                    from src.scrapers.france_travail import FranceTravailScraper
-                    scraper = FranceTravailScraper(user_id=user_id)
+                    from src.scrapers.france_travail import FranceTravailScraper as _SC  # noqa: F401
+                else:
+                    logger.warning("Unknown source_key %r — skipping", source_key)
+                    continue
             except Exception as exc:
-                logger.warning("Could not load scraper for %r: %s", source_key, exc)
+                logger.warning("Could not import scraper for %r: %s", source_key, exc)
                 continue
 
             from src.scrapers.filters import ScraperFilters
             max_days_old = user.max_days_old if hasattr(user, "max_days_old") else 30
             for work_mode in work_modes:
+                # Fresh scraper per (source, work_mode): ensures __aenter__/__aexit__
+                # are called on a clean object and the browser semaphore slot is
+                # never held across iterations.
+                try:
+                    if source_key == "wttj":
+                        from src.scrapers.wttj import WTTJScraper
+                        scraper = WTTJScraper(user_id=user_id)
+                    elif source_key == "indeed":
+                        from src.scrapers import get_indeed_scraper
+                        scraper = get_indeed_scraper(user_id=user_id)
+                    elif source_key == "indeed_api":
+                        from src.scrapers.indeed_api import IndeedApiScraper
+                        scraper = IndeedApiScraper(user_id=user_id)
+                    elif source_key == "linkedin":
+                        from src.scrapers.linkedin import LinkedInScraper
+                        scraper = LinkedInScraper(user_id=user_id)
+                    elif source_key == "adzuna":
+                        from src.scrapers.adzuna import AdzunaScraper
+                        scraper = AdzunaScraper(user_id=user_id)
+                    else:
+                        from src.scrapers.france_travail import FranceTravailScraper
+                        scraper = FranceTravailScraper(user_id=user_id)
+                except Exception as exc:
+                    logger.warning("Could not instantiate scraper for %r: %s", source_key, exc)
+                    continue
+
                 mode_filters = ScraperFilters(
                     work_modes=[work_mode],
                     countries=countries,
