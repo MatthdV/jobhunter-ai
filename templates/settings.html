@@ -9,6 +9,31 @@
     <p class="text-sm text-gray-500 mt-1">{{ t.settings_subtitle if t else "Configurer votre profil et votre recherche." }}</p>
   </div>
 
+  <!-- ===== Import LinkedIn PDF ===== -->
+  <div class="bg-indigo-50 rounded-xl border border-indigo-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-5 space-y-3">
+      <h2 class="text-base font-semibold text-indigo-900">Remplir mon profil depuis LinkedIn</h2>
+      <p class="text-xs text-indigo-700">
+        Exporte ton profil sur LinkedIn (<strong>Plus → Enregistrer au format PDF</strong>),
+        puis importe-le ici. L'IA remplit ton profil automatiquement — plus besoin d'éditer le YAML à la main.
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <input type="file" id="linkedin-pdf" accept="application/pdf"
+               class="text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg
+                      file:border-0 file:text-sm file:font-medium file:bg-indigo-600 file:text-white
+                      hover:file:bg-indigo-700 file:cursor-pointer">
+        <button onclick="importLinkedin()" id="linkedin-import-btn"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg
+                       hover:bg-indigo-700 transition-colors disabled:opacity-50">
+          Importer
+        </button>
+      </div>
+      <p class="text-xs text-amber-700">
+        ⚠ Les infos extraites par l'IA sont à relire — vérifie le résultat dans le mode avancé ci-dessous.
+      </p>
+    </div>
+  </div>
+
   <!-- ===== Mon profil ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
@@ -184,17 +209,14 @@
       <p class="text-xs text-gray-400 mt-0.5">{{ t.sources_subtitle if t else "Activez une source puis configurez vos mots-clés et localisation." }}</p>
     </div>
     <div class="px-6 py-3 space-y-0" id="sources-section">
+
+      {# --- Sources Playwright (credentials utilisateur) --- #}
       {% for src_name, src_label, src_desc in [
-          ('wttj',           'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
-          ('france_travail', 'France Travail',         'API officielle — offres FR uniquement'),
-          ('adzuna',         'Adzuna',                 'API agrégateur — 19 pays (FR, GB, DE, US…)'),
-          ('arbeitsagentur', 'Arbeitsagentur',         'API officielle — offres DE uniquement'),
-          ('indeed',         'Indeed',                 'Playwright — offres internationales'),
-          ('linkedin',       'LinkedIn',               'Scraper Playwright — nécessite un compte LinkedIn'),
+          ('wttj',     'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
+          ('linkedin', 'LinkedIn',              'Scraper Playwright — nécessite un compte LinkedIn'),
       ] %}
       {% set sc = source_configs.get(src_name, {}) %}
       <div class="border-b border-gray-50 last:border-0 py-3">
-        <!-- Toggle row -->
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-800">{{ src_label }}</p>
@@ -211,8 +233,6 @@
                          ring-0 transition duration-200 ease-in-out translate-x-0"></span>
           </button>
         </div>
-
-        <!-- Config panel (shown when source active) -->
         <div id="config-{{ src_name }}"
              class="mt-3 pl-1 space-y-3 source-config-panel hidden">
           <div>
@@ -267,6 +287,98 @@
         </div>
       </div>
       {% endfor %}
+
+      {# --- Sources API (clés Railway uniquement — pas de credentials utilisateur) --- #}
+      {% for src_name, src_label, src_desc, key_fields in [
+          ('adzuna',         'Adzuna',         'API REST — offres FR, UK, DE, ES et autres',    ['adzuna_app_id', 'adzuna_api_key']),
+          ('france_travail', 'France Travail', 'API officielle — offres France Travail (ex Pôle Emploi)', ['france_travail_client_id', 'france_travail_client_secret']),
+          ('indeed',         'Indeed',         'API JSearch via RapidAPI — offres internationales', ['indeed_api_key']),
+      ] %}
+      {% set sc = source_configs.get(src_name, {}) %}
+      <div class="border-b border-gray-50 last:border-0 py-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-800">
+              {{ src_label }}
+              {% if global_creds and key_fields[0] in global_creds %}
+              <span class="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>Clé Railway
+              </span>
+              {% else %}
+              <span class="ml-2 inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Clé manquante
+              </span>
+              {% endif %}
+            </p>
+            <p class="text-xs text-gray-400">{{ src_desc }}</p>
+          </div>
+          <button
+            id="toggle-{{ src_name }}"
+            onclick="toggleSource('{{ src_name }}')"
+            data-source="{{ src_name }}"
+            {% if not (global_creds and key_fields[0] in global_creds) %}disabled title="Clé API manquante côté serveur"{% endif %}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                   transition-colors duration-200 ease-in-out focus:outline-none
+                   source-toggle bg-gray-200 {% if not (global_creds and key_fields[0] in global_creds) %}opacity-40 cursor-not-allowed{% endif %}">
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow
+                         ring-0 transition duration-200 ease-in-out translate-x-0"></span>
+          </button>
+        </div>
+        <div id="config-{{ src_name }}"
+             class="mt-3 pl-1 space-y-3 source-config-panel hidden">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Mots-clés de recherche</label>
+            <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px]
+                        focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
+                 id="tags-kw-{{ src_name }}-container" data-src="{{ src_name }}">
+              {% for kw in sc.get('keywords', []) %}
+              <span class="tag-pill" data-val="{{ kw | e }}">
+                {{ kw | e }}<button type="button" onclick="removeTag(this)" class="ml-1 text-gray-400 hover:text-red-500">×</button>
+              </span>
+              {% endfor %}
+              <input type="text"
+                     id="tags-kw-{{ src_name }}-input"
+                     placeholder="Ajouter un mot-clé…"
+                     onkeydown="handleSourceTagKey(event,'{{ src_name }}')"
+                     class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Localisation</label>
+              <input type="text"
+                     id="loc-{{ src_name }}"
+                     value="{{ sc.get('location', '') | e }}"
+                     placeholder="ex: Paris, Remote"
+                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                            focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Modes de travail</label>
+              <div class="flex gap-3 mt-2">
+                {% for mode, label in [('remote','Remote'),('hybrid','Hybride'),('on-site','Présentiel')] %}
+                <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
+                  <input type="checkbox"
+                         class="work-mode-{{ src_name }} rounded border-gray-300 text-indigo-600"
+                         value="{{ mode }}"
+                         {% if mode in sc.get('work_modes', ['remote']) %}checked{% endif %}>
+                  {{ label }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button onclick="saveSourceConfig('{{ src_name }}')"
+                    class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg
+                           hover:bg-indigo-700 transition-colors">
+              {{ t.btn_save if t else "Sauvegarder" }}
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
     </div>
   </div>
 
@@ -278,14 +390,10 @@
     </div>
     <div class="px-6 py-5 space-y-4">
       {% for field_name, field_label, field_hint in [
-          ('openrouter_api_key',          'OpenRouter API Key',            'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
-          ('anthropic_api_key',           'Anthropic API Key',             'Optionnel — si vous préférez Claude directement.'),
-          ('wttj_email',                  'WTTJ Email',                    'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
-          ('wttj_password',               'WTTJ Mot de passe',             'Mot de passe Welcome to the Jungle.'),
-          ('france_travail_client_id',    'France Travail Client ID',      'Client ID de votre app France Travail (francetravail.io → Mes applications).'),
-          ('france_travail_client_secret','France Travail Client Secret',  'Secret généré à la création de l\'app France Travail.'),
-          ('adzuna_app_id',               'Adzuna App ID',                 'App ID depuis developer.adzuna.com (inscription gratuite).'),
-          ('adzuna_app_key',              'Adzuna App Key',                'App Key Adzuna.'),
+          ('openrouter_api_key', 'OpenRouter API Key', 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
+          ('anthropic_api_key',  'Anthropic API Key',  'Optionnel — si vous préférez Claude directement.'),
+          ('wttj_email',         'WTTJ Email',         'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
+          ('wttj_password',      'WTTJ Mot de passe',  'Mot de passe Welcome to the Jungle.'),
       ] %}
       <div>
         <div class="flex items-center gap-2 mb-1">
@@ -604,6 +712,39 @@
       }
     } catch (_) {
       showToast('Erreur réseau', 'error');
+    }
+  }
+
+  // ────────────────────────────────────────────────────────
+  // LinkedIn PDF import
+  // ────────────────────────────────────────────────────────
+  async function importLinkedin() {
+    const input = document.getElementById('linkedin-pdf');
+    const btn = document.getElementById('linkedin-import-btn');
+    const file = input.files[0];
+    if (!file) {
+      showToast('Sélectionne un PDF d’abord', 'error');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('file', file);
+    btn.disabled = true;
+    btn.textContent = 'Import en cours…';
+    try {
+      const res = await fetch('/api/profile/import-linkedin', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const ta = document.getElementById('profile-yaml');
+        if (ta) ta.value = data.profile_yaml || '';
+        showToast('Profil importé — relis le résultat puis sauvegarde', 'success');
+      } else {
+        showToast('Erreur : ' + (data.detail || 'import échoué'), 'error');
+      }
+    } catch (_) {
+      showToast('Erreur réseau', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Importer';
     }
   }
 

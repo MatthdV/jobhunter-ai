@@ -184,6 +184,13 @@
       </span>
     </div>
 
+    <!-- Draft warning: AI output must be reviewed before sending -->
+    <div class="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+      <p class="text-sm text-amber-800">
+        ⚠ Brouillon généré par IA — relis chaque ligne avant d'envoyer. L'IA peut inventer des informations.
+      </p>
+    </div>
+
     <!-- Cover letter -->
     {% if app.cover_letter %}
     <div>
@@ -198,7 +205,7 @@
     <!-- CV + submission date -->
     <div class="flex flex-wrap items-center gap-4">
       {% if app.cv_path %}
-      <a href="{{ app.cv_path }}" target="_blank" rel="noopener noreferrer"
+      <a href="/applications/{{ app.id }}/cv" target="_blank" rel="noopener noreferrer"
          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

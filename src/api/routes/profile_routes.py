@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from src.api.deps import get_current_user
 from src.api.security import encrypt_keys
-from src.api.user_settings import _CREDENTIAL_FIELDS, get_credential_names
+from src.api.user_settings import (
+    _CREDENTIAL_FIELDS,
+    get_credential_names,
+    get_settings_for_user,
+)
 from src.config.settings import settings
 from src.storage.database import get_session
 from src.storage.models import User
@@ -29,15 +33,7 @@ _DEFAULT_SOURCE_ENTRY: dict[str, object] = {
     "auto_translate": False,
 }
 
-AVAILABLE_SOURCES = [
-    "wttj",
-    "france_travail",
-    "adzuna",
-    "arbeitsagentur",
-    "indeed",
-    "indeed_api",
-    "linkedin",
-]
+AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin"]
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +76,88 @@ def update_profile(
         user.profile_yaml = body.profile_yaml  # type: ignore[assignment]
 
     return ProfileOut(profile_yaml=body.profile_yaml)
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn PDF import → profile YAML
+# ---------------------------------------------------------------------------
+
+# Sections written from the LinkedIn PDF. Strategy sections (job_sources,
+# target_roles, search, filters, archetypes…) are preserved untouched so the
+# import never wipes a user's scan config.
+_IMPORTED_SECTIONS = ("candidate", "skills", "experiences", "education", "projects")
+
+_MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post("/profile/import-linkedin", response_model=ProfileOut)
+async def import_linkedin_pdf(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> ProfileOut:
+    """Build/merge the user's profile from an exported LinkedIn profile PDF.
+
+    Uses the user's own configured LLM. Merges extracted candidate/skills/
+    experiences/education/projects into the existing profile_yaml, preserving
+    job_sources and other strategy sections. The result is returned for review.
+    """
+    from src.importers.linkedin_pdf import (
+        LinkedInPdfError,
+        extract_text,
+        profile_from_pdf,
+    )
+    from src.llm.factory import get_client
+
+    if (file.content_type or "") not in ("application/pdf", "application/octet-stream"):
+        raise HTTPException(status_code=422, detail="Le fichier doit être un PDF.")
+
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=422, detail="Fichier vide.")
+    if len(pdf_bytes) > _MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="PDF trop volumineux (max 10 Mo).")
+
+    # Build an LLM client from the user's configured provider + key.
+    user_cfg = get_settings_for_user(current_user)
+    provider = user_cfg.get("llm_provider", settings.llm_provider)
+    api_key = user_cfg.get(f"{provider}_api_key", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune clé API LLM configurée. Ajoute ta clé dans les identifiants d'abord.",
+        )
+    model = user_cfg.get("llm_model") or None
+    client = get_client(provider, model=model, api_key=api_key)
+
+    try:
+        text = extract_text(pdf_bytes)
+        extracted = await profile_from_pdf(text, client)
+    except LinkedInPdfError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("LinkedIn PDF import failed for user %d", current_user.id)
+        raise HTTPException(status_code=502, detail=f"Échec de l'extraction IA : {exc}") from exc
+
+    # Merge into existing profile, preserving non-imported (strategy) sections.
+    existing: dict = {}
+    if current_user.profile_yaml:
+        try:
+            existing = yaml.safe_load(current_user.profile_yaml) or {}
+        except yaml.YAMLError:
+            existing = {}
+    for key in _IMPORTED_SECTIONS:
+        if key in extracted and extracted[key] not in (None, "", []):
+            existing[key] = extracted[key]
+
+    merged_yaml = yaml.safe_dump(existing, allow_unicode=True, sort_keys=False)
+
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = merged_yaml  # type: ignore[assignment]
+
+    return ProfileOut(profile_yaml=merged_yaml)
 
 
 # ---------------------------------------------------------------------------
@@ -153,14 +231,6 @@ def update_credentials(
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         user.encrypted_keys = encrypted_blob  # type: ignore[assignment]
-
-    # Reload stored keys for response
-    from src.api.user_settings import get_credential_names as _get_names
-    # Need fresh user object with updated encrypted_keys
-    with get_session() as session:
-        fresh_user = session.get(User, current_user.id)
-        if fresh_user:
-            session.expunge(fresh_user)
 
     stored = [k for k in _CREDENTIAL_FIELDS if existing.get(k)]
     return CredentialsOut(

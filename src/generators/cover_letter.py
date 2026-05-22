@@ -38,12 +38,19 @@ _ENGLISH_THRESHOLD: float = 0.25
 class CoverLetterGenerator:
     """Generate a personalised cover letter for a specific job offer."""
 
-    def __init__(self, client: LLMClient | None = None) -> None:
+    def __init__(
+        self,
+        client: LLMClient | None = None,
+        profile: dict[str, Any] | None = None,
+    ) -> None:
         if client is None:
             client = get_client(settings.llm_provider)
         self._client = client
-        with _PROFILE_PATH.open() as fh:
-            self._profile: dict[str, Any] = yaml.safe_load(fh)
+        if profile is not None:
+            self._profile: dict[str, Any] = profile
+        else:
+            with _PROFILE_PATH.open() as fh:
+                self._profile = yaml.safe_load(fh)
 
     async def generate(self, job: Job) -> str:
         """Generate a cover letter text for the given job."""

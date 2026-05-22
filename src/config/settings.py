@@ -74,13 +74,13 @@ class Settings(BaseSettings):
     indeed_api_key: str = Field("", description="RapidAPI key for JSearch (Indeed) API")
     indeed_mode: str = Field("api", description='Indeed scraper backend: "api" | "playwright"')
 
-    # --- France Travail API ---
-    france_travail_client_id: str = Field("", description="France Travail API client ID (from francetravail.io)")
-    france_travail_client_secret: str = Field("", description="France Travail API client secret")
+    # --- Adzuna ---
+    adzuna_app_id: str = Field("", description="Adzuna App ID (from developer.adzuna.com)")
+    adzuna_api_key: str = Field("", description="Adzuna API Key (from developer.adzuna.com)")
 
-    # --- Adzuna API ---
-    adzuna_app_id: str = Field("", description="Adzuna API app ID (from developer.adzuna.com, free)")
-    adzuna_app_key: str = Field("", description="Adzuna API app key")
+    # --- France Travail ---
+    france_travail_client_id: str = Field("", description="France Travail API client ID (francetravail.io)")
+    france_travail_client_secret: str = Field("", description="France Travail API client secret")
 
     # --- Database ---
     database_url: str = Field("sqlite:///./jobhunter.db", description="SQLAlchemy database URL")
@@ -97,6 +97,13 @@ class Settings(BaseSettings):
 
     # --- App behaviour ---
     log_level: str = Field("INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR")
+    max_concurrent_browsers: int = Field(
+        1,
+        ge=1,
+        le=8,
+        description="Max simultaneous Playwright browsers across all users (anti-OOM gate)",
+    )
+    registration_open: bool = Field(True, description="Set to false (REGISTRATION_OPEN=false) to disable public registration after beta accounts are created")
     dry_run: bool = Field(True, description="If true, never actually submit applications")
     max_applications_per_day: int = Field(10, ge=1, le=50, description="Daily application cap")
     min_match_score: int = Field(80, ge=0, le=100, description="Minimum AI match score to consider")

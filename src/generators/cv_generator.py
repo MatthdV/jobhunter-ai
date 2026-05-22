@@ -43,12 +43,19 @@ class CVGenerator:
 
     TEMPLATE_DIR = Path(__file__).parent / "templates"
 
-    def __init__(self, client: LLMClient | None = None) -> None:
+    def __init__(
+        self,
+        client: LLMClient | None = None,
+        profile: dict[str, Any] | None = None,
+    ) -> None:
         if client is None:
             client = get_client(settings.llm_provider)
         self._client = client
-        with _PROFILE_PATH.open() as fh:
-            self._profile: dict[str, Any] = yaml.safe_load(fh)
+        if profile is not None:
+            self._profile: dict[str, Any] = profile
+        else:
+            with _PROFILE_PATH.open() as fh:
+                self._profile = yaml.safe_load(fh)
         self._jinja_env = Environment(
             loader=FileSystemLoader(str(self.TEMPLATE_DIR)),
             autoescape=False,

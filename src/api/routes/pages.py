@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 import json
@@ -346,19 +346,44 @@ def job_detail(
     )
 
 
-@router.get("/settings", response_class=HTMLResponse)
-def settings_page(
-    request: Request,
+@router.get("/applications/{app_id}/cv")
+def download_cv(
+    app_id: int,
     current_user: User = Depends(require_user_redirect),
-) -> HTMLResponse:
-    """User settings page."""
+) -> FileResponse:
+    """Serve the generated CV PDF for an application the user owns.
+
+    Ownership-checked (never serve another user's file). The data/ dir is not
+    mounted as static precisely so downloads go through this auth gate.
+    """
+    with get_session() as session:
+        app = (
+            session.query(Application)
+            .filter(Application.id == app_id, Application.user_id == current_user.id)
+            .one_or_none()
+        )
+        if app is None or not app.cv_path:
+            raise HTTPException(status_code=404, detail="CV introuvable")
+        cv_path = Path(app.cv_path)
+
+    if not cv_path.is_file():
+        raise HTTPException(status_code=404, detail="Fichier CV introuvable sur le disque")
+
+    return FileResponse(
+        str(cv_path),
+        media_type="application/pdf",
+        filename=cv_path.name,
+    )
+
+
+def _build_settings_context(request: Request, current_user: User, extra: dict | None = None) -> dict:
+    """Build the full template context required by settings.html."""
     import yaml as _yaml
-    from src.api.user_settings import get_credential_names
+    from src.api.user_settings import get_credential_names, get_global_credential_names
 
     raw_yaml = current_user.profile_yaml or ""
     profile_data: dict = _yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
 
-    # Per-source config — first entry per source name
     source_configs: dict = {}
     for src in profile_data.get("job_sources", []):
         name = src.get("name")
@@ -369,19 +394,30 @@ def settings_page(
                 "work_modes": src.get("work_modes", ["remote"]),
             }
 
-    stored_creds = get_credential_names(current_user)
+    ctx: dict = {
+        "current_user": current_user,
+        "profile_data": profile_data,
+        "source_configs": source_configs,
+        "stored_creds": get_credential_names(current_user),
+        "global_creds": get_global_credential_names(),
+        "t": get_t(current_user),
+        "current_lang": get_ui_lang(current_user),
+    }
+    if extra:
+        ctx.update(extra)
+    return ctx
 
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """User settings page."""
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {
-            "current_user": current_user,
-            "profile_data": profile_data,
-            "source_configs": source_configs,
-            "stored_creds": stored_creds,
-            "t": get_t(current_user),
-            "current_lang": get_ui_lang(current_user),
-        },
+        _build_settings_context(request, current_user),
     )
 
 
@@ -398,12 +434,12 @@ def update_search_settings(
         if user is None:
             raise HTTPException(status_code=404)
         user.max_days_old = value  # type: ignore[assignment]
-    t = get_t(current_user)
     import json as _json
+    t = get_t(current_user)
     resp = templates.TemplateResponse(
         request,
         "settings.html",
-        {"current_user": current_user, "saved": True, "t": t, "current_lang": get_ui_lang(current_user)},
+        _build_settings_context(request, current_user, extra={"saved": True}),
     )
     resp.headers["X-Toast"] = _json.dumps({"message": t["toast_saved"], "type": "success"})
     return resp

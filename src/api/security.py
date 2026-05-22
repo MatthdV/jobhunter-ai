@@ -57,6 +57,38 @@ def decode_access_token(token: str, secret: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Password reset tokens (short-lived, scoped via "type" claim)
+# ---------------------------------------------------------------------------
+
+_RESET_TOKEN_EXPIRE_MINUTES = 30
+
+
+def create_reset_token(user_id: int, secret: str) -> str:
+    """Return a signed JWT for password reset, valid 30 minutes.
+
+    Carries ``type=reset`` so an access token can't be reused as a reset token
+    and vice versa.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=_RESET_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": str(user_id), "type": "reset", "exp": expire}
+    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
+
+
+def decode_reset_token(token: str, secret: str) -> int | None:
+    """Decode a reset token and return user_id, or None if invalid/expired/wrong type."""
+    try:
+        payload = jwt.decode(token, secret, algorithms=[_ALGORITHM])
+        if payload.get("type") != "reset":
+            return None
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        return int(sub)
+    except (JWTError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Fernet credential encryption
 # ---------------------------------------------------------------------------
 

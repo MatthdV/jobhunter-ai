@@ -34,21 +34,60 @@ _SOURCE_NAME_MAP = {
     "wttj": "wttj",
     "indeed": "indeed",
     "indeed_api": "indeed_api",
-    "france_travail": "france_travail",
-    "adzuna": "adzuna",
-    "arbeitsagentur": "arbeitsagentur",
     "linkedin": "linkedin",
+    "adzuna": "adzuna",
+    "france_travail": "france_travail",
 }
+
+# Default sources injected when a user's profile has no job_sources section.
+# search_terms is empty → each source is skipped by the keywords check, so
+# no actual scraping runs — but the scan doesn't abort with an error either.
+_DEFAULT_JOB_SOURCES: list[dict] = [
+    {
+        "name": "wttj",
+        "enabled": True,
+        "search_terms": [],
+        "location": "",
+        "countries": ["FR"],
+        "work_modes": ["remote"],
+        "auto_translate": False,
+    },
+    {
+        "name": "adzuna",
+        "enabled": True,
+        "search_terms": [],
+        "location": "",
+        "countries": ["FR"],
+        "work_modes": ["remote"],
+        "auto_translate": False,
+    },
+    {
+        "name": "france_travail",
+        "enabled": True,
+        "search_terms": [],
+        "location": "",
+        "countries": ["FR"],
+        "work_modes": ["remote"],
+        "auto_translate": False,
+    },
+]
 
 
 def _load_job_sources_for_user(user: User) -> list[dict]:
-    """Read job_sources from the user's profile. Returns [] on any error."""
+    """Read enabled job_sources from the user's profile.
+
+    Falls back to *_DEFAULT_JOB_SOURCES* when the profile is empty or
+    has no job_sources section, so the scan phase never hard-aborts for
+    users who haven't configured their sources yet.
+    """
     try:
         profile = get_profile_for_user(user)
-        return [s for s in profile.get("job_sources", []) if s.get("enabled", True)]
+        sources = [s for s in profile.get("job_sources", []) if s.get("enabled", True)]
+        if sources:
+            return sources
     except Exception as exc:
         logger.warning("Could not load job_sources for user %d: %s", user.id, exc)
-        return []
+    return _DEFAULT_JOB_SOURCES
 
 
 def _load_user(user_id: int) -> User | None:
@@ -73,10 +112,6 @@ async def _run_scan(user_id: int) -> None:
             tracker.error("scan", "No enabled job_sources in profile", user_id=user_id)
             return
 
-        # Global fallback keywords from profile.search_keywords
-        profile = get_profile_for_user(user)
-        global_keywords: list[str] = profile.get("search_keywords", [])
-
         with get_session() as session:
             existing_urls: set[str] = {
                 url for (url,) in session.query(Job.url).filter(Job.user_id == user_id).all()
@@ -85,7 +120,7 @@ async def _run_scan(user_id: int) -> None:
         new_count = 0
         for source in job_sources:
             source_key = _SOURCE_NAME_MAP.get(source.get("name", ""), "")
-            keywords = source.get("search_terms", []) or global_keywords
+            keywords = source.get("search_terms", [])
             location = source.get("location", "")
             countries = source.get("countries", ["FR"])
 
@@ -121,78 +156,53 @@ async def _run_scan(user_id: int) -> None:
                 if source_key == "wttj":
                     from src.scrapers.wttj import WTTJScraper
                     scraper = WTTJScraper(user_id=user_id)
-                elif source_key in ("indeed", "indeed_api"):
+                elif source_key == "indeed":
                     from src.scrapers import get_indeed_scraper
                     scraper = get_indeed_scraper(user_id=user_id)
-                elif source_key == "france_travail":
-                    from src.scrapers.france_travail import FranceTravailScraper
-                    scraper = FranceTravailScraper(user_id=user_id)
-                elif source_key == "adzuna":
-                    from src.scrapers.adzuna import AdzunaScraper
-                    scraper = AdzunaScraper(user_id=user_id)
-                elif source_key == "arbeitsagentur":
-                    from src.scrapers.arbeitsagentur import ArbeitsagenturScraper
-                    scraper = ArbeitsagenturScraper(user_id=user_id)
+                elif source_key == "indeed_api":
+                    from src.scrapers.indeed_api import IndeedApiScraper
+                    scraper = IndeedApiScraper(user_id=user_id)
                 elif source_key == "linkedin":
                     from src.scrapers.linkedin import LinkedInScraper
                     scraper = LinkedInScraper(user_id=user_id)
+                elif source_key == "adzuna":
+                    from src.scrapers.adzuna import AdzunaScraper
+                    scraper = AdzunaScraper(user_id=user_id)
+                elif source_key == "france_travail":
+                    from src.scrapers.france_travail import FranceTravailScraper
+                    scraper = FranceTravailScraper(user_id=user_id)
             except Exception as exc:
                 logger.warning("Could not load scraper for %r: %s", source_key, exc)
                 continue
 
-            if scraper is None:
-                logger.warning("No scraper instantiated for source_key=%r, skipping", source_key)
-                continue
-
             from src.scrapers.filters import ScraperFilters
-            from src.utils.salary_normalizer import get_supported_countries
             max_days_old = user.max_days_old if hasattr(user, "max_days_old") else 30
-            supported = get_supported_countries(source_key)
-
-            try:
-                async with scraper:
-                    for country in countries:
-                        if supported and country not in supported:
-                            logger.debug(
-                                "Scraper %r does not support country=%r, skipping",
-                                source_key, country,
-                            )
-                            continue
-                        for work_mode in work_modes:
-                            mode_filters = ScraperFilters(
-                                work_modes=[work_mode],
-                                countries=[country],
-                                location=location,
-                                max_days_old=max_days_old,
-                            )
-                            try:
-                                jobs = await scraper.search(
-                                    keywords=all_keywords,
-                                    location=location,
-                                    filters=mode_filters,
-                                    limit=50,
-                                    seen_urls=existing_urls,
-                                    country_code=country,
-                                )
-                                fresh = [j for j in jobs if j.url not in existing_urls]
-                                if fresh:
-                                    with get_session() as session:
-                                        for job in fresh:
-                                            job.user_id = user_id  # type: ignore[assignment]
-                                            session.add(job)
-                                            existing_urls.add(job.url)
-                                    new_count += len(fresh)
-                                logger.info(
-                                    "Scraper %r country=%r mode=%r: %d new jobs",
-                                    source_key, country, work_mode, len(fresh) if fresh else 0,
-                                )
-                            except Exception:
-                                logger.exception(
-                                    "Scraper %r country=%r mode=%r raised an error",
-                                    source_key, country, work_mode,
-                                )
-            except Exception:
-                logger.exception("Scraper %r setup/teardown failed", source_key)
+            for work_mode in work_modes:
+                mode_filters = ScraperFilters(
+                    work_modes=[work_mode],
+                    countries=countries,
+                    location=location,
+                    max_days_old=max_days_old,
+                )
+                try:
+                    async with scraper:
+                        jobs = await scraper.search(
+                            keywords=all_keywords,
+                            location=location,
+                            filters=mode_filters,
+                            limit=50,
+                            seen_urls=existing_urls,
+                        )
+                    fresh = [j for j in jobs if j.url not in existing_urls]
+                    if fresh:
+                        with get_session() as session:
+                            for job in fresh:
+                                job.user_id = user_id  # type: ignore[assignment]
+                                session.add(job)
+                                existing_urls.add(job.url)
+                        new_count += len(fresh)
+                except Exception:
+                    logger.exception("Scraper %r mode=%r raised an error", source_key, work_mode)
 
         tracker.done("scan", user_id=user_id, result={"new_jobs": new_count})
     except Exception as exc:
@@ -226,9 +236,15 @@ async def _run_match(user_id: int) -> None:
             )
             return
 
+        from src.llm.factory import get_client
         from src.matching.scorer import Scorer
 
-        scorer = Scorer()
+        profile = get_profile_for_user(user)
+        scoring_provider = user_cfg.get("llm_scoring_provider") or provider
+        scoring_model = user_cfg.get("llm_scoring_model") or user_cfg.get("llm_model") or None
+        scoring_key = user_cfg.get(f"{scoring_provider}_api_key") or key_map.get(provider, "")
+        scoring_client = get_client(scoring_provider, model=scoring_model, api_key=scoring_key)
+        scorer = Scorer(client=scoring_client, profile=profile)
 
         with get_session() as session:
             new_job_ids = [
@@ -290,10 +306,15 @@ async def _run_apply(user_id: int, dry_run: bool = True) -> None:
 
         from src.generators.cover_letter import CoverLetterGenerator
         from src.generators.cv_generator import CVGenerator
+        from src.llm.factory import get_client
         from src.storage.models import Application, ApplicationStatus
 
-        cv_gen = CVGenerator()
-        cl_gen = CoverLetterGenerator()
+        profile = get_profile_for_user(user)
+        apply_model = user_cfg.get("llm_model") or None
+        apply_key = key_map.get(provider, "")
+        apply_client = get_client(provider, model=apply_model, api_key=apply_key)
+        cv_gen = CVGenerator(client=apply_client, profile=profile)
+        cl_gen = CoverLetterGenerator(client=apply_client, profile=profile)
         output_dir = Path("data") / "cvs"
         output_dir.mkdir(parents=True, exist_ok=True)
 

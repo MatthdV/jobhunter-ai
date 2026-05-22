@@ -70,7 +70,7 @@ def setup_db():
         s.commit()
 
     # Reset the singleton tracker so pipeline state doesn't bleed between tests
-    tracker._tasks.clear()
+    tracker.reset()
 
     yield
 
@@ -715,17 +715,17 @@ class TestPipelineStatus:
 
 class TestTaskTracker:
     def test_idle_by_default(self):
-        tracker._tasks.clear()
+        tracker.reset()
         assert tracker.get("scan")["status"] == TaskStatus.IDLE
 
     def test_start_sets_running(self):
-        tracker._tasks.clear()
+        tracker.reset()
         tracker.start("scan")
         assert tracker.is_running("scan")
         assert tracker.get("scan")["status"] == TaskStatus.RUNNING
 
     def test_done_sets_done(self):
-        tracker._tasks.clear()
+        tracker.reset()
         tracker.start("scan")
         tracker.done("scan", result={"new_jobs": 3})
         assert tracker.get("scan")["status"] == TaskStatus.DONE
@@ -733,24 +733,24 @@ class TestTaskTracker:
         assert not tracker.is_running("scan")
 
     def test_error_sets_error(self):
-        tracker._tasks.clear()
+        tracker.reset()
         tracker.error("scan", "exploded")
         assert tracker.get("scan")["status"] == TaskStatus.ERROR
         assert tracker.get("scan")["error"] == "exploded"
 
     def test_all_returns_four_phases(self):
-        tracker._tasks.clear()
+        tracker.reset()
         all_phases = tracker.all()
         assert set(all_phases.keys()) == {"scan", "match", "apply", "respond"}
 
     def test_done_without_prior_start_is_safe(self):
-        tracker._tasks.clear()
+        tracker.reset()
         # Should not raise even if start() was never called
         tracker.done("scan", result=None)
         assert tracker.get("scan")["status"] == TaskStatus.DONE
 
     def test_error_without_prior_start_is_safe(self):
-        tracker._tasks.clear()
+        tracker.reset()
         tracker.error("scan", "boom")
         assert tracker.get("scan")["status"] == TaskStatus.ERROR
 
@@ -822,7 +822,7 @@ class TestConcurrentPipeline:
 class TestBackgroundTaskCrash:
     def test_tracker_error_state_on_exception(self):
         """If a phase raises, tracker.error() should be called."""
-        tracker._tasks.clear()
+        tracker.reset()
         # Simulate _run_scan crashing: tracker.start + tracker.error
         tracker.start("scan")
         assert tracker.is_running("scan")
@@ -832,7 +832,7 @@ class TestBackgroundTaskCrash:
         assert not tracker.is_running("scan")
 
     def test_tracker_not_stuck_running_after_error(self):
-        tracker._tasks.clear()
+        tracker.reset()
         tracker.start("apply")
         tracker.error("apply", "crash")
         assert not tracker.is_running("apply")
@@ -934,3 +934,63 @@ class TestEdgeCases:
         resp = client.get(f"/api/jobs/{job_id}")
         assert resp.status_code == 200
         assert resp.json()["application"] is not None
+
+
+# ---------------------------------------------------------------------------
+# CV download — GET /applications/{app_id}/cv (ownership-gated)
+# ---------------------------------------------------------------------------
+
+
+class TestCvDownload:
+    def test_owner_can_download_cv(self, client: TestClient, tmp_path):
+        pdf = tmp_path / "cv.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        with get_session() as session:
+            j = _make_job(url="https://example.com/job/cv1")
+            session.add(j)
+            session.flush()
+            app_row = Application(
+                job_id=j.id, user_id=_TEST_USER_ID,
+                status=ApplicationStatus.DRAFT, cv_path=str(pdf),
+            )
+            session.add(app_row)
+            session.flush()
+            app_id = app_row.id
+
+        resp = client.get(f"/applications/{app_id}/cv")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+
+    def test_other_users_cv_returns_404(self, client: TestClient, tmp_path):
+        pdf = tmp_path / "other.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        with get_session() as session:
+            j = _make_job(url="https://example.com/job/cv2", user_id=999)
+            session.add(j)
+            session.flush()
+            app_row = Application(
+                job_id=j.id, user_id=999,  # NOT the test user
+                status=ApplicationStatus.DRAFT, cv_path=str(pdf),
+            )
+            session.add(app_row)
+            session.flush()
+            app_id = app_row.id
+
+        resp = client.get(f"/applications/{app_id}/cv")
+        assert resp.status_code == 404
+
+    def test_missing_file_returns_404(self, client: TestClient):
+        with get_session() as session:
+            j = _make_job(url="https://example.com/job/cv3")
+            session.add(j)
+            session.flush()
+            app_row = Application(
+                job_id=j.id, user_id=_TEST_USER_ID,
+                status=ApplicationStatus.DRAFT, cv_path="/nonexistent/cv.pdf",
+            )
+            session.add(app_row)
+            session.flush()
+            app_id = app_row.id
+
+        resp = client.get(f"/applications/{app_id}/cv")
+        assert resp.status_code == 404

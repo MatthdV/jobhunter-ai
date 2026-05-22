@@ -190,6 +190,30 @@ class Recruiter(Base):
         return f"<Recruiter {self.name!r} <{self.email}>>"
 
 
+class PipelineRun(Base):
+    """Current execution state of one pipeline phase for one user.
+
+    Persisted so phase status survives Railway redeploys (the in-memory
+    TaskTracker singleton was reset on every deploy). One row per
+    (user_id, phase) — updated in place as the phase transitions.
+    """
+
+    __tablename__ = "pipeline_runs"
+    __table_args__ = (UniqueConstraint("user_id", "phase", name="uq_pipeline_run_user_phase"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False)   # 0 = CLI sentinel (see background.py)
+    phase = Column(String(20), nullable=False)  # scan | match | apply | respond
+    status = Column(String(20), nullable=False, default="idle")  # idle|running|done|error
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    result_json = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PipelineRun user={self.user_id} {self.phase}={self.status}>"
+
+
 class MatchResult(Base):
     __tablename__ = "match_results"
 
