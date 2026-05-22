@@ -118,9 +118,21 @@ async def import_linkedin_pdf(
         raise HTTPException(status_code=413, detail="PDF trop volumineux (max 10 Mo).")
 
     # Build an LLM client from the user's configured provider + key.
+    # Auto-detect: try the configured provider first, then fall back to any
+    # provider that has a key — so users with OpenRouter don't need to manually
+    # set llm_provider when the Railway default is "anthropic".
     user_cfg = get_settings_for_user(current_user)
-    provider = user_cfg.get("llm_provider", settings.llm_provider)
-    api_key = user_cfg.get(f"{provider}_api_key", "")
+    _preferred = user_cfg.get("llm_provider", settings.llm_provider)
+    _providers_to_try = [_preferred] + [
+        p for p in ("openrouter", "anthropic", "openai", "mistral", "deepseek")
+        if p != _preferred
+    ]
+    provider, api_key = None, ""
+    for _p in _providers_to_try:
+        _key = user_cfg.get(f"{_p}_api_key", "")
+        if _key:
+            provider, api_key = _p, _key
+            break
     if not api_key:
         raise HTTPException(
             status_code=400,
