@@ -10,7 +10,7 @@
   </div>
 
   <!-- ===== Import LinkedIn PDF ===== -->
-  <div class="bg-indigo-50 rounded-xl border border-indigo-200 shadow-sm overflow-hidden">
+  <div id="import" class="bg-indigo-50 rounded-xl border border-indigo-200 shadow-sm overflow-hidden">
     <div class="px-6 py-5 space-y-3">
       <h2 class="text-base font-semibold text-indigo-900">Remplir mon profil depuis LinkedIn</h2>
       <p class="text-xs text-indigo-700">
@@ -203,7 +203,7 @@
   </div>
 
   <!-- ===== Sources actives ===== -->
-  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div id="sources" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
       <h2 class="text-base font-semibold text-gray-800">{{ t.sources_title if t else "Sources actives" }}</h2>
       <p class="text-xs text-gray-400 mt-0.5">{{ t.sources_subtitle if t else "Activez une source puis configurez vos mots-clés et localisation." }}</p>
@@ -383,7 +383,7 @@
   </div>
 
   <!-- ===== Clés API ===== -->
-  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div id="credentials" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
       <h2 class="text-base font-semibold text-gray-800">{{ t.api_keys_title if t else "Clés API" }}</h2>
       <p class="text-xs text-gray-400 mt-0.5">{{ t.api_keys_subtitle if t else "Chiffrées côté serveur — jamais stockées en clair." }}</p>

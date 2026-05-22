@@ -5,6 +5,7 @@ from pathlib import Path
 
 from types import SimpleNamespace
 
+import yaml
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -14,6 +15,7 @@ import json
 from src.api.background import tracker
 from src.api.deps import require_user_redirect
 from src.api.i18n import get_t, get_ui_lang
+from src.config.settings import settings
 from src.storage.database import get_session
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus, MatchResult, User
 from datetime import date, datetime
@@ -25,6 +27,49 @@ TEMPLATES_DIR = Path(__file__).parent.parent.parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 router = APIRouter()
+
+
+def _onboarding_state(user: User) -> dict[str, bool]:
+    """Return which onboarding steps the user has completed.
+
+    Used to show/hide the setup checklist banner on the dashboard.
+    Steps: profile filled, LLM API key configured, search terms defined.
+    """
+    profile: dict = yaml.safe_load(user.profile_yaml or "") or {}
+    candidate = profile.get("candidate", {})
+    profile_done = bool(candidate.get("name") or candidate.get("title"))
+
+    key_done = False
+    if user.encrypted_keys and settings.fernet_key:
+        from src.api.security import decrypt_keys
+        keys = decrypt_keys(user.encrypted_keys, settings.fernet_key)
+        key_done = any(
+            keys.get(k)
+            for k in (
+                "anthropic_api_key",
+                "openai_api_key",
+                "mistral_api_key",
+                "deepseek_api_key",
+                "openrouter_api_key",
+            )
+        )
+    # Fallback: a shared server key on Railway counts as configured
+    if not key_done:
+        key_done = bool(
+            settings.anthropic_api_key
+            or settings.openai_api_key
+            or settings.mistral_api_key
+            or settings.deepseek_api_key
+            or settings.openrouter_api_key
+        )
+
+    sources_done = any(
+        s.get("search_terms")
+        for s in profile.get("job_sources", [])
+        if s.get("enabled", True)
+    )
+
+    return {"profile": profile_done, "api_key": key_done, "search_terms": sources_done}
 
 
 def _build_stats(user_id: int) -> dict:
@@ -225,6 +270,7 @@ def dashboard(
             "current_user": current_user,
             "t": t,
             "current_lang": get_ui_lang(current_user),
+            "onboarding": _onboarding_state(current_user),
         },
     )
 
