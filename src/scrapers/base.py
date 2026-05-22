@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from typing import Any
 
+from src.config.settings import settings
 from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
 from src.utils.salary_normalizer import get_country_config, normalize_salary
@@ -15,6 +17,11 @@ from src.utils.salary_normalizer import get_country_config, normalize_salary
 WORKING_DAYS_PER_YEAR: int = 220
 
 _REMOTE_KEYWORDS = ("remote", "télétravail", "distanciel")
+
+# Process-wide gate limiting how many Playwright browsers run at once.
+# The web app runs a single uvicorn worker, so one module-level semaphore is
+# shared across all users' concurrent scans. HTTP-only scrapers bypass it.
+_BROWSER_SEMAPHORE = asyncio.Semaphore(settings.max_concurrent_browsers)
 
 
 class BaseScraper(ABC):
@@ -34,6 +41,10 @@ class BaseScraper(ABC):
     #: Overridden in each concrete scraper.
     source: str
 
+    #: True for scrapers that launch a Playwright browser (heavy, RAM-bound).
+    #: These acquire the process-wide browser semaphore; HTTP scrapers don't.
+    USES_BROWSER: bool = False
+
     # Per-source rate-limit constants — override in subclasses.
     MIN_DELAY: float = 1.0
     MAX_DELAY: float = 2.5
@@ -43,6 +54,7 @@ class BaseScraper(ABC):
         self.headless = headless
         self._user_id = user_id  # Set on every Job created by this scraper
         self._token_bucket = _TokenBucket(capacity=self.MAX_RPH, rate=self.MAX_RPH / 3600)
+        self._holds_browser_slot = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -297,11 +309,28 @@ class BaseScraper(ABC):
     # ------------------------------------------------------------------
 
     async def __aenter__(self) -> BaseScraper:
-        await self._setup()
+        if self.USES_BROWSER:
+            # Block until a browser slot is free — caps total concurrent
+            # chromium processes across all users (anti-OOM).
+            await _BROWSER_SEMAPHORE.acquire()
+            self._holds_browser_slot = True
+        try:
+            await self._setup()
+        except BaseException:
+            # Release the slot if setup failed, otherwise it leaks.
+            if getattr(self, "_holds_browser_slot", False):
+                _BROWSER_SEMAPHORE.release()
+                self._holds_browser_slot = False
+            raise
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        await self._teardown()
+        try:
+            await self._teardown()
+        finally:
+            if getattr(self, "_holds_browser_slot", False):
+                _BROWSER_SEMAPHORE.release()
+                self._holds_browser_slot = False
 
 
 # ---------------------------------------------------------------------------

@@ -141,18 +141,26 @@ class ScoringError(Exception):
 class Scorer:
     """Score job offers against the candidate profile using an LLM."""
 
-    def __init__(self, client: LLMClient | None = None, story_bank: StoryBank | None = None) -> None:
+    def __init__(
+        self,
+        client: LLMClient | None = None,
+        story_bank: StoryBank | None = None,
+        profile: dict[str, Any] | None = None,
+    ) -> None:
         if client is None:
             provider = settings.llm_scoring_provider or settings.llm_provider
             model = settings.llm_scoring_model or settings.llm_model or None
             client = get_client(provider, model=model)
         self._client = client
-        # Resolve profile path at construction time, not at module import.
-        # This ensures PROFILE_PATH env var changes (e.g. between test runs
-        # or multi-tenant Docker restarts) are picked up without re-importing.
-        profile_path = get_profile_path()
-        with profile_path.open() as fh:
-            self._profile: dict[str, Any] = yaml.safe_load(fh)
+        # Per-user profile when provided (web/multi-tenant); else fall back to
+        # the file-based profile (CLI mode). Resolve the path at construction
+        # time so PROFILE_PATH env changes are picked up without re-import.
+        if profile is not None:
+            self._profile: dict[str, Any] = profile
+        else:
+            profile_path = get_profile_path()
+            with profile_path.open() as fh:
+                self._profile = yaml.safe_load(fh)
         self._archetypes = self._profile.get("archetypes", {})
         try:
             self._story_bank = story_bank or StoryBank()

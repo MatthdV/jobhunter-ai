@@ -1,38 +1,33 @@
-"""LinkedIn Jobs scraper — guest API (httpx, no login, no Playwright).
-
-LinkedIn exposes public job search and detail endpoints used by logged-out
-browsers and crawlers. No account, cookies, or Playwright required.
-
-Search:  GET /jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=...
-Detail:  GET /jobs-guest/jobs/api/jobPosting/{job_id}
-"""
+"""LinkedIn Jobs scraper — playwright-stealth + persistent cookies."""
 
 from __future__ import annotations
 
+import json
 import logging
-import re
+import os
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
-import httpx
 from bs4 import BeautifulSoup
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from src.scrapers.base import BaseScraper
-from src.scrapers.exceptions import ParseError, RateLimitError
+from src.scrapers.exceptions import AuthenticationError, ParseError
 from src.scrapers.filters import ScraperFilters
 from src.storage.models import Job
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://www.linkedin.com"
-_SEARCH_URL = _BASE + "/jobs-guest/jobs/api/seeMoreJobPostings/search"
-_DETAIL_URL = _BASE + "/jobs-guest/jobs/api/jobPosting/{job_id}"
-_JOB_PAGE_URL = _BASE + "/jobs/view/{job_id}/"
+_COOKIES_PATH = Path(__file__).parents[2] / "data" / "linkedin_cookies.json"
+_SEARCH_URL = "https://www.linkedin.com/jobs/search/?keywords={kw}{geo}{wt}"
 
-_WORK_TYPE: dict[str, str] = {
-    "remote": "2",
-    "hybrid": "3",
-    "on-site": "1",
+_LI_WORK_TYPE: dict[str, str] = {
+    "remote": "&f_WT=2",
+    "hybrid": "&f_WT=3",
+    "on-site": "&f_WT=1",
 }
+_LI_BASE = "https://www.linkedin.com"
 
 _GEO_IDS: dict[str, str] = {
     "FR": "105015875",
@@ -45,67 +40,139 @@ _GEO_IDS: dict[str, str] = {
     "BE": "100565514",
     "CA": "101174742",
     "SE": "105117694",
-    "AU": "101452733",
-    "SG": "102454443",
-    "IT": "103350119",
-    "PL": "105072130",
-    "AT": "103883259",
-}
-
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Referer": "https://www.linkedin.com/jobs/search/",
 }
 
 
 class LinkedInScraper(BaseScraper):
-    """Scrape LinkedIn Jobs via the public guest API — no login required.
+    """Scrape LinkedIn Jobs with stealth Playwright + cookie persistence.
 
-    Uses LinkedIn's undocumented guest endpoints (same data Google's crawler
-    indexes). No Playwright, no cookies, no account risk.
-
-    Rate limits: 3-6s between requests, max ~120 req/h.
+    Authentication flow:
+    1. Load cookies from data/linkedin_cookies.json (if present).
+    2. Navigate to linkedin.com — check for authenticated nav element.
+    3. If not authenticated and credentials available → run login flow.
+    4. If not authenticated and credentials missing → raise AuthenticationError.
+    5. 2FA / CAPTCHA encountered → raise AuthenticationError (out of scope Phase 1).
 
     Usage::
 
         async with LinkedInScraper() as scraper:
-            jobs = await scraper.search(
-                keywords=["automation engineer"], limit=25, country_code="FR"
-            )
+            jobs = await scraper.search(keywords=["automation engineer"], limit=50)
     """
 
     source = "linkedin"
+    USES_BROWSER = True
     MIN_DELAY = 3.0
-    MAX_DELAY = 6.0
-    MAX_RPH = 120
+    MAX_DELAY = 7.0
+    MAX_RPH = 30
 
     def __init__(self, headless: bool = True, user_id: int | None = None) -> None:
         super().__init__(headless=headless, user_id=user_id)
-        self._client: httpx.AsyncClient | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._playwright_ctx: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     async def _setup(self) -> None:
-        self._client = httpx.AsyncClient(
-            headers=_HEADERS,
-            timeout=30.0,
-            follow_redirects=True,
-        )
+        _COOKIES_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        self._playwright_ctx = await async_playwright().start()
+        self._browser = await self._playwright_ctx.chromium.launch(headless=self.headless)
+        self._context = await self._browser.new_context()
+
+        # playwright-stealth v2: apply to context — all pages inherit evasions
+        try:
+            from playwright_stealth import Stealth
+            await Stealth().apply_stealth_async(self._context)
+        except ImportError:
+            logger.warning("playwright-stealth not installed — LinkedIn may detect automation")
+
+        if _COOKIES_PATH.exists():
+            cookies = json.loads(_COOKIES_PATH.read_text())
+            await self._context.add_cookies(cookies)
 
     async def _teardown(self) -> None:
-        if self._client:
-            await self._client.aclose()
+        if self._context:
+            cookies = await self._context.cookies()
+            _COOKIES_PATH.parent.mkdir(exist_ok=True)
+            _COOKIES_PATH.write_text(json.dumps(cookies))
+        if self._browser:
+            await self._browser.close()
+        if self._playwright_ctx:
+            await self._playwright_ctx.stop()
 
     # ------------------------------------------------------------------
-    # _fetch_raw — returns list of job_id strings
+    # Authentication helpers
+    # ------------------------------------------------------------------
+
+    async def _is_authenticated(self, page: Page) -> bool:
+        # LinkedIn changed nav.global-nav to #global-nav (no longer <nav> tag)
+        nav = await page.query_selector("#global-nav, .global-nav")
+        return nav is not None
+
+    def _get_linkedin_credentials(self) -> tuple[str, str]:
+        """Return (email, password) from per-user encrypted store or global settings."""
+        from src.config.settings import settings as _settings
+        email = _settings.linkedin_email
+        password = _settings.linkedin_password
+        if self._user_id is not None:
+            try:
+                from src.api.user_settings import get_settings_for_user
+                from src.storage.database import get_session
+                from src.storage.models import User
+                with get_session() as session:
+                    user = session.get(User, self._user_id)
+                    if user:
+                        session.expunge(user)
+                        u_cfg = get_settings_for_user(user)
+                        email = u_cfg.get("linkedin_email") or email
+                        password = u_cfg.get("linkedin_password") or password
+            except Exception as exc:
+                logger.debug("LinkedIn: could not load per-user credentials: %s", exc)
+        return email, password
+
+    def _has_credentials(self) -> bool:
+        email, password = self._get_linkedin_credentials()
+        return bool(email) and bool(password)
+
+    async def _run_login(self, page: Page) -> None:
+        email, password = self._get_linkedin_credentials()
+
+        await page.goto("https://www.linkedin.com/login")
+        await page.fill("#username", email)
+        await page.fill("#password", password)
+        await page.click('button[type="submit"]')
+        await page.wait_for_load_state("domcontentloaded")
+
+        # Detect 2FA / CAPTCHA challenge pages
+        url = page.url
+        if "challenge" in url or "checkpoint" in url:
+            raise AuthenticationError(
+                "2FA challenge or CAPTCHA detected on LinkedIn — resolve manually and re-run"
+            )
+
+        if not await self._is_authenticated(page):
+            raise AuthenticationError("Login failed — credentials may be incorrect")
+
+    async def _authenticate(self, page: Page) -> None:
+        """Ensure the page is authenticated. Raises AuthenticationError if not possible."""
+        import asyncio as _aio
+        await _aio.sleep(2)  # Let dynamic content render after domcontentloaded
+        if await self._is_authenticated(page):
+            return
+
+        if not self._has_credentials():
+            raise AuthenticationError(
+                "LinkedIn cookies expired and no credentials in environment. "
+                "Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD in .env"
+            )
+
+        await self._run_login(page)
+
+    # ------------------------------------------------------------------
+    # _fetch_raw
     # ------------------------------------------------------------------
 
     async def _fetch_raw(
@@ -116,151 +183,156 @@ class LinkedInScraper(BaseScraper):
         limit: int,
         country_code: str = "FR",
     ) -> list[Any]:
-        assert self._client is not None, "_setup() must be called first"
+        """Fetch jobs from LinkedIn two-pane search: click each card, read detail."""
+        import asyncio as _aio
 
-        work_mode = (filters.work_modes or ["remote"])[0]
-        geo_id = _GEO_IDS.get(country_code.upper(), "")
-        kw = " ".join(keywords)
+        assert self._context is not None, "_setup() must be called first"
 
-        job_ids: list[str] = []
-        start = 0
-        page_size = 25
+        page = await self._context.new_page()
+        raw_items: list[dict[str, Any]] = []
 
-        while len(job_ids) < limit:
-            params: dict[str, str] = {
-                "keywords": kw,
-                "start": str(start),
-                "count": str(min(page_size, limit - len(job_ids))),
-                "f_WT": _WORK_TYPE.get(work_mode, "2"),
-            }
-            if geo_id:
-                params["geoId"] = geo_id
-            elif location:
-                params["location"] = location
-            if filters.max_days_old:
-                params["f_TPR"] = f"r{filters.max_days_old * 86400}"
+        try:
+            await page.goto(_LI_BASE, wait_until="domcontentloaded")
+            await self._authenticate(page)
+
+            kw = quote_plus(" ".join(keywords))
+            geo = _GEO_IDS.get(country_code, "")
+            geo_param = f"&geoId={geo}" if geo else ""
+            work_mode = (filters.work_modes or ["remote"])[0]
+            wt_param = _LI_WORK_TYPE.get(work_mode, "&f_WT=2")
+            tpr_param = f"&f_TPR=r{filters.max_days_old * 86400}" if filters.max_days_old else ""
+            search_url = _SEARCH_URL.format(kw=kw, geo=geo_param, wt=wt_param) + tpr_param
 
             await self._wait()
+            await page.goto(search_url, wait_until="domcontentloaded")
+
+            # Wait for job cards to render (SPA content loads after domcontentloaded)
             try:
-                resp = await self._client.get(_SEARCH_URL, params=params)
-            except httpx.HTTPError as exc:
-                logger.warning("LinkedIn search request failed: %s", exc)
-                break
+                await page.wait_for_selector(
+                    ".job-card-container", timeout=15000,
+                )
+            except Exception:
+                logger.warning("No job cards found for search: %s", search_url)
+                return []
 
-            if resp.status_code == 429:
-                raise RateLimitError("LinkedIn guest API rate limited (HTTP 429)")
-            if resp.status_code != 200:
-                logger.warning("LinkedIn search returned HTTP %d", resp.status_code)
-                break
+            cards = await page.query_selector_all(".job-card-container")
 
-            ids = _parse_job_ids(resp.text)
-            if not ids:
-                break  # no more results
+            for card in cards:
+                if len(raw_items) >= limit:
+                    break
 
-            job_ids.extend(ids)
-            if len(ids) < page_size:
-                break  # last page
-            start += page_size
+                job_id = await card.get_attribute("data-job-id")
+                if not job_id:
+                    continue
 
-        logger.debug("LinkedIn: %d job IDs for %r in %s", len(job_ids), kw, country_code)
-        return job_ids[:limit]
+                # Click card to load detail in the side pane
+                try:
+                    await card.click()
+                    await _aio.sleep(2)
+                except Exception:
+                    continue
+
+                detail_html = await page.content()
+                detail_soup = BeautifulSoup(detail_html, "lxml")
+                job_url = f"{_LI_BASE}/jobs/view/{job_id}/"
+                raw_items.append({"url": job_url, "detail_soup": detail_soup})
+
+        except AuthenticationError:
+            raise
+        except Exception as exc:
+            logger.warning("LinkedIn search failed: %s", exc)
+        finally:
+            await page.close()
+
+        return raw_items
 
     # ------------------------------------------------------------------
-    # _parse_raw — fetches detail for each job_id
+    # _parse_raw
     # ------------------------------------------------------------------
 
     async def _parse_raw(self, raw: Any) -> Job:
-        """Fetch job detail page for *raw* (job_id str) and parse into Job."""
-        if not isinstance(raw, str):
-            raise ParseError(f"Expected job_id str, got {type(raw).__name__}")
+        """Parse a LinkedIn two-pane detail dict into a Job instance.
 
-        assert self._client is not None, "_setup() must be called first"
-
-        job_id = raw
-        url = _JOB_PAGE_URL.format(job_id=job_id)
+        Expects raw = {"url": str, "detail_soup": BeautifulSoup}.
+        """
+        if not isinstance(raw, dict) or "url" not in raw or "detail_soup" not in raw:
+            raise ParseError("LinkedInScraper._parse_raw expects {url, detail_soup}")
 
         try:
-            await self._wait()
-            resp = await self._client.get(_DETAIL_URL.format(job_id=job_id))
-        except httpx.HTTPError as exc:
-            raise ParseError(f"LinkedIn detail fetch failed for {job_id}: {exc}") from exc
+            url: str = raw["url"]
+            soup: BeautifulSoup = raw["detail_soup"]
 
-        if resp.status_code == 404:
-            raise ParseError(f"LinkedIn job {job_id} not found (404)")
-        if resp.status_code != 200:
-            raise ParseError(f"LinkedIn detail HTTP {resp.status_code} for {job_id}")
-
-        try:
-            soup = BeautifulSoup(resp.text, "lxml")
-
-            title_el = soup.select_one(".top-card-layout__title, .topcard__title")
-            if not title_el:
-                raise ParseError(f"No title found for LinkedIn job {job_id}")
-            title: str = title_el.get_text(strip=True)
-
-            company_el = soup.select_one(
-                ".topcard__org-name-link, "
-                ".top-card-layout__second-subline a, "
-                ".topcard__flavor--black-link"
+            # Title — try new two-pane layout, then legacy selector
+            title_el = soup.select_one(
+                ".job-details-jobs-unified-top-card__job-title, "
+                ".jobs-unified-top-card__job-title, "
+                ".jobs-unified-top-card h1"
             )
-            company: str | None = company_el.get_text(strip=True) if company_el else None
+            title: str = title_el.get_text(strip=True) if title_el else ""
 
-            location_el = soup.select_one(".topcard__flavor--bullet")
-            location_str: str | None = location_el.get_text(strip=True) if location_el else None
+            if not title:
+                raise ParseError(f"Missing title in LinkedIn detail pane for {url}")
 
-            desc_el = soup.select_one(".description__text")
+            # Location — new layout: metadata container; legacy: second bullet
+            meta_el = soup.select_one(
+                ".job-details-jobs-unified-top-card__primary-description-container, "
+                ".jobs-unified-top-card__subtitle-primary-grouping"
+            )
+            location_str: str | None = None
+            if meta_el:
+                meta_text = meta_el.get_text(separator="·", strip=True)
+                parts = [p.strip() for p in meta_text.split("·")]
+                if parts:
+                    location_str = parts[0]
+            else:
+                # Legacy: second bullet
+                location_el = soup.select_one(
+                    ".jobs-unified-top-card__bullet ~ .jobs-unified-top-card__bullet"
+                )
+                location_str = location_el.get_text(strip=True) if location_el else None
+
+            # Description — try multiple selectors (new + legacy)
+            description_el = soup.select_one(
+                ".jobs-description__content, "
+                ".jobs-description-content__text, "
+                ".jobs-box__html-content"
+            )
             description: str | None = (
-                desc_el.get_text(separator=" ", strip=True) if desc_el else None
+                description_el.get_text(separator=" ", strip=True)
+                if description_el
+                else None
             )
 
-            contract_type: str | None = None
-            is_remote = False
-            for item in soup.select(".description__job-criteria-item"):
-                hdr_el = item.select_one(".description__job-criteria-subheader")
-                val_el = item.select_one(".description__job-criteria-text--criteria")
-                if not hdr_el or not val_el:
-                    continue
-                hdr = hdr_el.get_text(strip=True).lower()
-                val = val_el.get_text(strip=True)
-                if "employment type" in hdr or "type de contrat" in hdr:
-                    contract_type = val
-                if "remote" in val.lower() or "télétravail" in val.lower():
-                    is_remote = True
-
-            if location_str and "remote" in location_str.lower():
-                is_remote = True
-            if description and any(
-                kw in description.lower()
-                for kw in ("full remote", "fully remote", "100% remote", "télétravail complet")
+            # Salary — new layout: job insight spans; legacy: top-card insight
+            salary_raw_str: str | None = None
+            for insight in soup.select(
+                ".job-details-jobs-unified-top-card__job-insight span, "
+                ".jobs-unified-top-card__job-insight span"
             ):
-                is_remote = True
+                text = insight.get_text(strip=True)
+                if "€" in text or "$" in text or "£" in text or ("k" in text.lower() and any(c.isdigit() for c in text)):
+                    salary_raw_str = text
+                    break
 
-            # company is stored as a relationship (company_id FK); skip here —
-            # the company enrichment phase handles Company creation separately.
+            # Contract type — legacy: first bullet; new layout: not reliably available
+            contract_el = soup.select_one(".jobs-unified-top-card__bullet")
+            contract_type: str | None = (
+                contract_el.get_text(strip=True) if contract_el else None
+            )
+
             return Job(
                 title=title,
                 url=url,
                 source=self.source,
                 location=location_str,
+                salary_raw=salary_raw_str,
+                salary_min=None,
+                salary_max=None,
                 description=description,
                 contract_type=contract_type,
-                is_remote=is_remote,
             )
 
         except ParseError:
             raise
         except Exception as exc:
-            raise ParseError(f"Failed to parse LinkedIn job {job_id}: {exc}") from exc
-
-
-def _parse_job_ids(html: str) -> list[str]:
-    """Extract job IDs from LinkedIn guest search HTML response."""
-    soup = BeautifulSoup(html, "lxml")
-    ids: list[str] = []
-    for el in soup.find_all(attrs={"data-entity-urn": True}):
-        urn: str = el["data-entity-urn"]
-        m = re.search(r":jobPosting:(\d+)", urn)
-        if m:
-            ids.append(m.group(1))
-    seen: set[str] = set()
-    return [i for i in ids if not (i in seen or seen.add(i))]  # type: ignore[func-returns-value]
+            raise ParseError(f"Failed to parse LinkedIn job: {exc}") from exc

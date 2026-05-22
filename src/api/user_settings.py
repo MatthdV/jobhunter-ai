@@ -11,7 +11,8 @@ from src.storage.models import User
 
 logger = logging.getLogger(__name__)
 
-# All credential fields stored in User.encrypted_keys
+# Credential fields stored per-user in encrypted_keys.
+# Global/Railway-only keys (Adzuna, France Travail, Indeed) are NOT here.
 _CREDENTIAL_FIELDS = (
     "anthropic_api_key",
     "openai_api_key",
@@ -28,11 +29,6 @@ _CREDENTIAL_FIELDS = (
     "linkedin_password",
     "wttj_email",
     "wttj_password",
-    "indeed_api_key",
-    "france_travail_client_id",
-    "france_travail_client_secret",
-    "adzuna_app_id",
-    "adzuna_app_key",
 )
 
 
@@ -65,7 +61,12 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
         "linkedin_password": settings.linkedin_password,
         "wttj_email": settings.wttj_email,
         "wttj_password": settings.wttj_password,
+        # Railway-only keys — never overridden per-user
         "indeed_api_key": settings.indeed_api_key,
+        "adzuna_app_id": settings.adzuna_app_id,
+        "adzuna_api_key": settings.adzuna_api_key,
+        "france_travail_client_id": settings.france_travail_client_id,
+        "france_travail_client_secret": settings.france_travail_client_secret,
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
         "llm_scoring_provider": settings.llm_scoring_provider,
@@ -101,11 +102,30 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
 
 
 def get_credential_names(user: User) -> list[str]:
-    """Return list of credential field names that the user has stored.
-
-    Does not return values — only which keys are present.
-    """
+    """Return list of credential field names that the user has stored in DB."""
     if not user.encrypted_keys or not settings.fernet_key:
         return []
     user_keys = decrypt_keys(user.encrypted_keys, settings.fernet_key)
     return [k for k in _CREDENTIAL_FIELDS if user_keys.get(k)]
+
+
+# Credential fields that are set globally (Railway ENV) and never entered by users.
+_GLOBAL_ONLY_FIELDS: dict[str, str] = {
+    "adzuna_app_id": "adzuna_app_id",
+    "adzuna_api_key": "adzuna_api_key",
+    "france_travail_client_id": "france_travail_client_id",
+    "france_travail_client_secret": "france_travail_client_secret",
+    "indeed_api_key": "indeed_api_key",
+}
+
+
+def get_global_credential_names() -> list[str]:
+    """Return credential field names that are configured in global Railway ENV.
+
+    These are never stored in user DB — they come from server-side env vars only.
+    """
+    return [
+        field
+        for field, attr in _GLOBAL_ONLY_FIELDS.items()
+        if getattr(settings, attr, "")
+    ]

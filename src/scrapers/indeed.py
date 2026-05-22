@@ -41,6 +41,7 @@ class IndeedScraper(BaseScraper):
     """
 
     source = "indeed"
+    USES_BROWSER = True
     MIN_DELAY = 2.0
     MAX_DELAY = 4.0
     MAX_RPH = 60

@@ -46,6 +46,16 @@ def register_page(request: Request) -> HTMLResponse:
     return auth.register_page(request)
 
 
+@app.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+def forgot_password_page(request: Request) -> HTMLResponse:
+    return auth.forgot_password_page(request)
+
+
+@app.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+def reset_password_page(request: Request, token: str = "") -> HTMLResponse:
+    return auth.reset_password_page(request, token=token)
+
+
 # ---------------------------------------------------------------------------
 # API routers
 # ---------------------------------------------------------------------------
@@ -76,6 +86,14 @@ def _startup() -> None:
 
     init_db()  # raises on failure — don't silently continue with a broken DB
     logger.info("Database initialised successfully")
+
+    # Any phase left RUNNING belongs to a process that died mid-run (this
+    # redeploy). Flip it to ERROR so the UI reflects reality, not a stale spinner.
+    from src.api.background import reconcile_orphaned_runs
+
+    reconciled = reconcile_orphaned_runs()
+    if reconciled:
+        logger.info("Reconciled %d orphaned pipeline run(s) to error", reconciled)
 
     # Run integrity check on SQLite only (no-op on Postgres).
     # Given two past corruption events, catching corruption at startup beats

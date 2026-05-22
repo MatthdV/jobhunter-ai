@@ -45,8 +45,13 @@
         </button>
       </form>
 
+      <!-- Forgot password -->
+      <p class="text-center text-sm mt-4">
+        <a href="/forgot-password" class="text-gray-500 hover:text-indigo-600 hover:underline">Mot de passe oublié ?</a>
+      </p>
+
       <!-- Register link -->
-      <p class="text-center text-sm text-gray-500 mt-6">
+      <p class="text-center text-sm text-gray-500 mt-2">
         {{ t.no_account if t else "Pas encore de compte ?" }}
         <a href="/register" class="text-indigo-600 hover:underline font-medium">{{ t.create_account if t else "Créer un compte" }}</a>
       </p>
