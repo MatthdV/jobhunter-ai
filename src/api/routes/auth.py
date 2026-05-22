@@ -75,7 +75,7 @@ def _set_auth_cookie(response: RedirectResponse, token: str) -> None:
         max_age=_COOKIE_MAX_AGE,
         httponly=True,
         samesite="lax",
-        secure=False,  # Set True in production with HTTPS
+        secure=True,  # Railway terminates TLS at edge — always True
     )
 
 
@@ -143,7 +143,7 @@ def register(
         return _templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "Les inscriptions sont fermées. Contacte l'administrateur."},
+            {"error": "Les inscriptions sont fermées. Contacte l'administrateur.", "t": TRANSLATIONS["fr"], "current_lang": "fr"},
             status_code=403,
         )
 
@@ -152,14 +152,14 @@ def register(
         return _templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "Les mots de passe ne correspondent pas."},
+            {"error": "Les mots de passe ne correspondent pas.", "t": TRANSLATIONS["fr"], "current_lang": "fr"},
             status_code=400,
         )
     if len(password) < 8:
         return _templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "Mot de passe trop court (8 caractères minimum)."},
+            {"error": "Mot de passe trop court (8 caractères minimum).", "t": TRANSLATIONS["fr"], "current_lang": "fr"},
             status_code=400,
         )
 
@@ -175,7 +175,7 @@ def register(
             return _templates.TemplateResponse(
                 request,
                 "register.html",
-                {"error": "Un compte existe déjà avec cet email."},
+                {"error": "Un compte existe déjà avec cet email.", "t": TRANSLATIONS["fr"], "current_lang": "fr"},
                 status_code=400,
             )
 
@@ -219,7 +219,7 @@ def login(
             return _templates.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Email ou mot de passe incorrect."},
+                {"error": "Email ou mot de passe incorrect.", "t": TRANSLATIONS["fr"], "current_lang": "fr"},
                 status_code=401,
             )
         user_id = user.id
@@ -268,7 +268,11 @@ def forgot_password(
         user = session.query(User).filter(User.email == email).first()
         if user is not None:
             token = create_reset_token(user.id, settings.jwt_secret)
-            reset_link = f"{request.base_url}reset-password?token={token}"
+            _proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            _base = str(request.base_url).rstrip("/")
+            if _base.startswith("http://") and _proto == "https":
+                _base = "https://" + _base[len("http://"):]
+            reset_link = f"{_base}/reset-password?token={token}"
 
     # When the account doesn't exist, present a generic copy without a link.
     context = {"t": TRANSLATIONS["fr"], "current_lang": "fr"}
