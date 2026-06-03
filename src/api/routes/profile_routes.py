@@ -33,7 +33,7 @@ _DEFAULT_SOURCE_ENTRY: dict[str, object] = {
     "auto_translate": False,
 }
 
-AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin", "adzuna", "france_travail"]
+AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin"]
 
 
 # ---------------------------------------------------------------------------
@@ -117,41 +117,38 @@ async def import_linkedin_pdf(
     if len(pdf_bytes) > _MAX_PDF_BYTES:
         raise HTTPException(status_code=413, detail="PDF trop volumineux (max 10 Mo).")
 
-    # Build an LLM client: personal per-user keys take STRICT priority over
-    # Railway-level global keys. This avoids Railway ANTHROPIC_API_KEY (invalid
-    # placeholder) shadowing a valid user-stored OpenRouter key.
-    _providers_order = ("openrouter", "anthropic", "openai", "mistral", "deepseek")
+    # Build an LLM client from the user's configured provider + key.
+    # Priority: user's personal key for preferred provider → any personal key → Railway global.
+    # This avoids using a Railway-wide OpenRouter key with no credits when the user has
+    # their own Anthropic/OpenAI key stored.
+    user_cfg = get_settings_for_user(current_user)
 
-    # 1. Decrypt personal keys stored by this user
     personal_keys: dict[str, str] = {}
     if current_user.encrypted_keys and settings.fernet_key:
-        from src.api.security import decrypt_keys as _dk
-        personal_keys = _dk(current_user.encrypted_keys, settings.fernet_key)
+        from src.api.security import decrypt_keys as _decrypt
+        try:
+            personal_keys = _decrypt(current_user.encrypted_keys, settings.fernet_key)
+        except Exception:
+            pass
 
-    provider, api_key = None, ""
+    provider = user_cfg.get("llm_provider", settings.llm_provider)
+    api_key = personal_keys.get(f"{provider}_api_key", "")
 
-    # 2. Try personal keys first (user-stored beats Railway ENV)
-    for _p in _providers_order:
-        _key = personal_keys.get(f"{_p}_api_key", "")
-        if _key:
-            provider, api_key = _p, _key
-            break
-
-    # 3. Fall back to merged config (Railway ENV global keys)
     if not api_key:
-        user_cfg = get_settings_for_user(current_user)
-        for _p in _providers_order:
-            _key = user_cfg.get(f"{_p}_api_key", "")
-            if _key:
-                provider, api_key = _p, _key
+        for p in ("openrouter", "anthropic", "openai", "mistral", "deepseek"):
+            k = personal_keys.get(f"{p}_api_key", "")
+            if k:
+                provider, api_key = p, k
                 break
+
+    if not api_key:
+        api_key = user_cfg.get(f"{provider}_api_key", "")
 
     if not api_key:
         raise HTTPException(
             status_code=400,
             detail="Aucune clé API LLM configurée. Ajoute ta clé dans les identifiants d'abord.",
         )
-    user_cfg = get_settings_for_user(current_user)
     model = user_cfg.get("llm_model") or None
     client = get_client(provider, model=model, api_key=api_key)
 
