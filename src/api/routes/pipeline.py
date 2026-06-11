@@ -118,6 +118,7 @@ async def _run_scan(user_id: int) -> None:
             }
 
         new_count = 0
+        scan_errors: list[str] = []
         for source in job_sources:
             source_key = _SOURCE_NAME_MAP.get(source.get("name", ""), "")
             keywords = source.get("search_terms", [])
@@ -149,6 +150,9 @@ async def _run_scan(user_id: int) -> None:
                     "Skipping source %r — missing name or search_terms",
                     source.get("name"),
                 )
+                scan_errors.append(
+                    f"{source.get('name', '?')}: aucun mot-clé configuré (voir Paramètres → Sources)"
+                )
                 continue
 
             # Validate source_key loads before iterating work_modes
@@ -170,6 +174,7 @@ async def _run_scan(user_id: int) -> None:
                     continue
             except Exception as exc:
                 logger.warning("Could not import scraper for %r: %s", source_key, exc)
+                scan_errors.append(f"{source_key}: {exc}")
                 continue
 
             from src.scrapers.filters import ScraperFilters
@@ -199,6 +204,7 @@ async def _run_scan(user_id: int) -> None:
                         scraper = FranceTravailScraper(user_id=user_id)
                 except Exception as exc:
                     logger.warning("Could not instantiate scraper for %r: %s", source_key, exc)
+                    scan_errors.append(f"{source_key}: {exc}")
                     continue
 
                 mode_filters = ScraperFilters(
@@ -224,10 +230,21 @@ async def _run_scan(user_id: int) -> None:
                                 session.add(job)
                                 existing_urls.add(job.url)
                         new_count += len(fresh)
-                except Exception:
+                except Exception as exc:
                     logger.exception("Scraper %r mode=%r raised an error", source_key, work_mode)
+                    scan_errors.append(f"{source_key} ({work_mode}): {exc}")
 
-        tracker.done("scan", user_id=user_id, result={"new_jobs": new_count})
+        if scan_errors and new_count == 0:
+            tracker.error(
+                "scan",
+                f"All sources failed — first error: {scan_errors[0]}",
+                user_id=user_id,
+            )
+            return
+        scan_result: dict = {"new_jobs": new_count}
+        if scan_errors:
+            scan_result["source_errors"] = scan_errors[:5]
+        tracker.done("scan", user_id=user_id, result=scan_result)
     except Exception as exc:
         logger.exception("Scan phase failed for user %d", user_id)
         tracker.error("scan", str(exc), user_id=user_id)
@@ -287,7 +304,16 @@ async def _run_match(user_id: int) -> None:
 
         with get_session() as session:
             new_jobs = session.query(Job).filter(Job.id.in_(new_job_ids)).all()
-            await scorer.score_batch(new_jobs, session)
+            scored = await scorer.score_batch(new_jobs, session)
+
+        errors = getattr(scorer, "last_batch_errors", [])
+        if errors and not scored:
+            tracker.error(
+                "match",
+                f"Scoring failed for all {len(errors)} jobs — first error: {errors[0]}",
+                user_id=user_id,
+            )
+            return
 
         with get_session() as session:
             matched_count = (
@@ -296,7 +322,11 @@ async def _run_match(user_id: int) -> None:
                 .count()
             )
 
-        tracker.done("match", user_id=user_id, result={"matched": matched_count})
+        result: dict = {"matched": matched_count}
+        if errors:
+            result["failed"] = len(errors)
+            result["first_error"] = errors[0]
+        tracker.done("match", user_id=user_id, result=result)
     except Exception as exc:
         logger.exception("Match phase failed for user %d", user_id)
         tracker.error("match", str(exc), user_id=user_id)
