@@ -34,3 +34,22 @@
   </button>
   {% endfor %}
 </div>
+
+{# Per-phase detail lines: surface errors and partial failures so a phase
+   never fails silently (green ✓ with 0 results and no explanation). #}
+<div class="mt-3 space-y-1">
+  {% for phase_key, label, endpoint, _extra in phases %}
+  {% set pi = pipeline_status.get(phase_key, {}) if pipeline_status else {} %}
+  {% if pi.get("status") == "error" and pi.get("error") %}
+  <p class="text-xs text-red-600">⚠ {{ label }} — {{ pi["error"] }}</p>
+  {% elif pi.get("status") == "done" and pi.get("result") %}
+  {% set r = pi["result"] %}
+  {% if phase_key == "scan" and r.get("source_errors") %}
+  <p class="text-xs text-amber-600">⚠ Scan — {{ r["source_errors"] | join(" · ") }}</p>
+  {% endif %}
+  {% if phase_key == "match" and r.get("failed") %}
+  <p class="text-xs text-amber-600">⚠ Match — {{ r["failed"] }} scoring(s) échoué(s) : {{ r.get("first_error", "") }}</p>
+  {% endif %}
+  {% endif %}
+  {% endfor %}
+</div>

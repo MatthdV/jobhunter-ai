@@ -252,11 +252,16 @@ class Scorer:
         tasks = [_score_one(jid) for jid in job_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         out: list[MatchResult] = []
+        errors: list[str] = []
         for job_id, res in zip(job_ids, results):
             if isinstance(res, Exception):
                 logger.warning("Scoring failed for job_id=%s: %s", job_id, res)
+                errors.append(f"job {job_id}: {res}")
             else:
                 out.append(res)
+        # Exposed so callers (pipeline, scheduler) can surface failures to the
+        # user instead of silently reporting "matched: 0".
+        self.last_batch_errors = errors
         return out
 
     def _build_prompt(self, job: Job) -> str:
