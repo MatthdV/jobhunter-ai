@@ -33,7 +33,7 @@ _DEFAULT_SOURCE_ENTRY: dict[str, object] = {
     "auto_translate": False,
 }
 
-AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin"]
+AVAILABLE_SOURCES = ["wttj", "indeed", "linkedin", "adzuna", "france_travail"]
 
 
 # ---------------------------------------------------------------------------
