@@ -595,15 +595,14 @@ class TestPipelineMatch:
 
     def test_match_returns_started_when_configured(self, client: TestClient):
         from unittest.mock import AsyncMock
-        from src.config.settings import settings
-        settings.anthropic_api_key = "fake-key-for-testing"
-        try:
+        import src.api.user_settings as us
+        _orig = us.get_settings_for_user
+        _patched = lambda u: {**_orig(u), "anthropic_api_key": "fake-key-for-testing"}
+        with patch("src.api.routes.pipeline.get_settings_for_user", side_effect=_patched):
             with patch("src.api.routes.pipeline._run_match", new_callable=AsyncMock):
                 resp = client.post("/api/pipeline/match")
-            assert resp.status_code == 200
-            assert resp.json()["status"] == "started"
-        finally:
-            settings.anthropic_api_key = ""
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "started"
 
 
 class TestPipelineApply:
@@ -623,27 +622,25 @@ class TestPipelineApply:
 
     def test_apply_dry_run_true_by_default(self, client: TestClient):
         from unittest.mock import AsyncMock
-        from src.config.settings import settings
-        settings.anthropic_api_key = "fake-key"
-        try:
+        import src.api.user_settings as us
+        _orig = us.get_settings_for_user
+        _patched = lambda u: {**_orig(u), "anthropic_api_key": "fake-key"}
+        with patch("src.api.routes.pipeline.get_settings_for_user", side_effect=_patched):
             with patch("src.api.routes.pipeline._run_apply", new_callable=AsyncMock):
                 resp = client.post("/api/pipeline/apply")
-            assert resp.status_code == 200
-            assert "dry_run=True" in resp.json()["message"]
-        finally:
-            settings.anthropic_api_key = ""
+        assert resp.status_code == 200
+        assert "dry_run=True" in resp.json()["message"]
 
     def test_apply_dry_run_false_reflected_in_message(self, client: TestClient):
         from unittest.mock import AsyncMock
-        from src.config.settings import settings
-        settings.anthropic_api_key = "fake-key"
-        try:
+        import src.api.user_settings as us
+        _orig = us.get_settings_for_user
+        _patched = lambda u: {**_orig(u), "anthropic_api_key": "fake-key"}
+        with patch("src.api.routes.pipeline.get_settings_for_user", side_effect=_patched):
             with patch("src.api.routes.pipeline._run_apply", new_callable=AsyncMock):
                 resp = client.post("/api/pipeline/apply?dry_run=false")
-            assert resp.status_code == 200
-            assert "dry_run=False" in resp.json()["message"]
-        finally:
-            settings.anthropic_api_key = ""
+        assert resp.status_code == 200
+        assert "dry_run=False" in resp.json()["message"]
 
     def test_apply_409_when_already_running(self, client: TestClient):
         tracker.start("apply", user_id=_TEST_USER_ID)
