@@ -2,10 +2,8 @@
    Context: pipeline_status (dict[phase_key -> {status, started_at, ...}])
 #}
 {% set phases = [
-  ("scan",    t.phase_scan if t else "🔍 Scanner",         "/api/pipeline/scan",              ""),
-  ("match",   t.phase_match if t else "⭐ Matcher",         "/api/pipeline/match",             ""),
-  ("apply",   t.phase_apply if t else "📤 Appliquer (dry)", "/api/pipeline/apply?dry_run=true",""),
-  ("respond", t.phase_respond if t else "💬 Répondre",      "/api/pipeline/respond",           ""),
+  ("scan",    t.phase_scan if t else "🔍 Scanner", "/api/pipeline/scan",  ""),
+  ("match",   t.phase_match if t else "⭐ Matcher", "/api/pipeline/match", ""),
 ] %}
 <div class="flex flex-wrap gap-3">
   {% for phase_key, label, endpoint, _extra in phases %}

@@ -245,6 +245,19 @@
                   ✓
                 </button>
                 {% endif %}
+                {% if job.status not in ("applied", "rejected", "skipped") %}
+                <button
+                  hx-post="/jobs/{{ job.id }}/status"
+                  hx-vals='{"status": "applied"}'
+                  hx-target="closest tr"
+                  hx-swap="outerHTML"
+                  class="text-xs text-gray-400 hover:text-blue-600 transition-colors font-medium"
+                  title="{{ t.job_mark_applied if t else 'J\'ai postulé' }}">
+                  📤
+                </button>
+                {% elif job.status == "applied" %}
+                <span class="text-xs text-green-600 font-medium">✓ Postulé</span>
+                {% endif %}
               </div>
             </td>
           </tr>

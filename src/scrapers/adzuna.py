@@ -73,7 +73,7 @@ class AdzunaScraper(BaseScraper):
     def _get_credentials(self) -> tuple[str, str]:
         """Return (app_id, app_key) from settings or per-user store."""
         app_id = settings.adzuna_app_id
-        app_key = settings.adzuna_app_key
+        app_key = settings.adzuna_api_key
         if self._user_id is not None:
             try:
                 from src.api.user_settings import get_settings_for_user
@@ -85,7 +85,7 @@ class AdzunaScraper(BaseScraper):
                         session.expunge(user)
                         u_cfg = get_settings_for_user(user)
                         app_id = u_cfg.get("adzuna_app_id") or app_id
-                        app_key = u_cfg.get("adzuna_app_key") or app_key
+                        app_key = u_cfg.get("adzuna_api_key") or app_key
             except Exception as exc:
                 logger.debug("Adzuna: could not load per-user credentials: %s", exc)
         return app_id, app_key
@@ -111,7 +111,7 @@ class AdzunaScraper(BaseScraper):
 
         app_id, app_key = self._get_credentials()
         if not app_id or not app_key:
-            logger.warning("Adzuna: ADZUNA_APP_ID / ADZUNA_APP_KEY not configured")
+            logger.warning("Adzuna: ADZUNA_APP_ID / ADZUNA_API_KEY not configured")
             return []
 
         adzuna_country = country_upper.lower()
