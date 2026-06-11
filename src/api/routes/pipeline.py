@@ -500,7 +500,8 @@ async def trigger_match(
     current_user: User = Depends(get_current_user),
 ) -> PipelineStartResponse:
     """Launch the match (AI scoring) phase in the background."""
-    await _atomic_start("match", current_user.id)
+    # Validate config BEFORE marking the phase as running — otherwise a 400
+    # here leaves the tracker stuck in RUNNING forever (button dead, 409s).
     user_cfg = get_settings_for_user(current_user)
     if not any(
         user_cfg.get(k)
@@ -511,6 +512,7 @@ async def trigger_match(
             status_code=400,
             detail="AI provider API key not configured. Set it in credentials or .env.",
         )
+    await _atomic_start("match", current_user.id)
     background_tasks.add_task(_run_match, current_user.id)
     return PipelineStartResponse(
         status="started",
@@ -526,7 +528,6 @@ async def trigger_apply(
     dry_run: bool = Query(True, description="When false, submits applications live"),
 ) -> PipelineStartResponse:
     """Launch the apply (CV generation) phase in the background."""
-    await _atomic_start("apply", current_user.id)
     user_cfg = get_settings_for_user(current_user)
     if not any(
         user_cfg.get(k)
@@ -537,6 +538,7 @@ async def trigger_apply(
             status_code=400,
             detail="AI provider API key not configured. Set it in credentials or .env.",
         )
+    await _atomic_start("apply", current_user.id)
     background_tasks.add_task(_run_apply, current_user.id, dry_run)
     return PipelineStartResponse(
         status="started",
@@ -551,7 +553,6 @@ async def trigger_respond(
     current_user: User = Depends(get_current_user),
 ) -> PipelineStartResponse:
     """Launch the respond (Gmail reply check) phase in the background."""
-    await _atomic_start("respond", current_user.id)
     user_cfg = get_settings_for_user(current_user)
     if not (
         user_cfg.get("gmail_client_id")
@@ -562,6 +563,7 @@ async def trigger_respond(
             status_code=400,
             detail="Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token.",
         )
+    await _atomic_start("respond", current_user.id)
     background_tasks.add_task(_run_respond, current_user.id)
     return PipelineStartResponse(
         status="started",
