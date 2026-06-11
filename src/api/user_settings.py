@@ -44,23 +44,25 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
     individual fields to sub-components (Scorer, scrapers, JobScheduler)
     without importing the pydantic model.
     """
-    # Start from global .env
+    # LLM API keys are user-owned — no global fallback (would bill the server operator).
+    # Users must configure their own key in Settings → Credentials.
+    # Infrastructure keys (Adzuna, France Travail, Indeed) stay global-only below.
     merged: dict[str, Any] = {
-        "anthropic_api_key": settings.anthropic_api_key,
-        "openai_api_key": settings.openai_api_key,
-        "mistral_api_key": settings.mistral_api_key,
-        "deepseek_api_key": settings.deepseek_api_key,
-        "openrouter_api_key": settings.openrouter_api_key,
-        "gmail_client_id": settings.gmail_client_id,
-        "gmail_client_secret": settings.gmail_client_secret,
-        "gmail_refresh_token": settings.gmail_refresh_token,
-        "gmail_user_email": settings.gmail_user_email,
-        "telegram_bot_token": settings.telegram_bot_token,
-        "telegram_chat_id": settings.telegram_chat_id,
-        "linkedin_email": settings.linkedin_email,
-        "linkedin_password": settings.linkedin_password,
-        "wttj_email": settings.wttj_email,
-        "wttj_password": settings.wttj_password,
+        "anthropic_api_key": "",
+        "openai_api_key": "",
+        "mistral_api_key": "",
+        "deepseek_api_key": "",
+        "openrouter_api_key": "",
+        "gmail_client_id": "",
+        "gmail_client_secret": "",
+        "gmail_refresh_token": "",
+        "gmail_user_email": "",
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
+        "linkedin_email": "",
+        "linkedin_password": "",
+        "wttj_email": "",
+        "wttj_password": "",
         # Railway-only keys — never overridden per-user
         "indeed_api_key": settings.indeed_api_key,
         "adzuna_app_id": settings.adzuna_app_id,
