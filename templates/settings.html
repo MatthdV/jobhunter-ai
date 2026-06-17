@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Paramètres — JobHunter AI{% endblock %}
+{% block title %}{{ t.settings_title if t else "Paramètres" }} — JobHunter AI{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-8">
@@ -48,14 +48,14 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Prénom / Nom</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_name if t else "Prénom / Nom" }}</label>
           <input id="p-name" type="text" value="{{ cand.get('name', '') }}"
-                 placeholder="Prénom Nom"
+                 placeholder="{{ t.ph_name if t else 'Prénom Nom' }}"
                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
                         focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Titre du poste recherché</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_job_title if t else "Titre du poste recherché" }}</label>
           <input id="p-title" type="text" value="{{ cand.get('title', '') }}"
                  placeholder="ex: Automation Engineer"
                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
@@ -65,14 +65,14 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Localisation</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.location_label if t else "Localisation" }}</label>
           <input id="p-location" type="text" value="{{ cand.get('location', '') }}"
                  placeholder="ex: Paris, France"
                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
                         focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Années d&apos;expérience</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_experience if t else "Années d'expérience" }}</label>
           <input id="p-exp" type="number" min="0" max="50"
                  value="{{ cand.get('experience_years', '') }}"
                  placeholder="ex: 7"
@@ -83,7 +83,7 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Salaire annuel min (€)</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_salary_min if t else "Salaire annuel min (€)" }}</label>
           <input id="p-sal-min" type="number" min="0"
                  value="{{ sal.get('min_annual', '') }}"
                  placeholder="ex: 50000"
@@ -91,7 +91,7 @@
                         focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Salaire annuel max (€)</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_salary_max if t else "Salaire annuel max (€)" }}</label>
           <input id="p-sal-max" type="number" min="0"
                  value="{{ sal.get('max_annual', '') }}"
                  placeholder="ex: 80000"
@@ -102,7 +102,7 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">TJM min (€/jour) <span class="text-gray-300">optionnel</span></label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_tjm_min if t else "TJM min (€/jour)" }} <span class="text-gray-300">{{ t.lbl_optional if t else "optionnel" }}</span></label>
           <input id="p-tjm-min" type="number" min="0"
                  value="{{ sal.get('min_daily_rate', '') }}"
                  placeholder="ex: 400"
@@ -110,7 +110,7 @@
                         focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">TJM max (€/jour) <span class="text-gray-300">optionnel</span></label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_tjm_max if t else "TJM max (€/jour)" }} <span class="text-gray-300">{{ t.lbl_optional if t else "optionnel" }}</span></label>
           <input id="p-tjm-max" type="number" min="0"
                  value="{{ sal.get('max_daily_rate', '') }}"
                  placeholder="ex: 700"
@@ -120,7 +120,7 @@
       </div>
 
       <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Compétences principales</label>
+        <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_skills if t else "Compétences principales" }}</label>
         <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px]
                     focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
              id="tags-skills-container" data-tagset="skills">
@@ -129,14 +129,14 @@
             {{ skill | e }}<button type="button" onclick="removeTag(this)" class="ml-1 text-gray-400 hover:text-red-500">×</button>
           </span>
           {% endfor %}
-          <input type="text" id="tags-skills-input" placeholder="Ajouter une compétence…"
+          <input type="text" id="tags-skills-input" placeholder="{{ t.ph_add_skill if t else 'Ajouter une compétence…' }}"
                  onkeydown="handleTagKey(event,'skills',false)"
                  class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
         </div>
       </div>
 
       <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Mots à exclure</label>
+        <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_excl_keywords if t else "Mots à exclure" }}</label>
         <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px]
                     focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
              id="tags-excl-container" data-tagset="excl">
@@ -146,7 +146,7 @@
             {{ kw | e }}<button type="button" onclick="removeTag(this)" class="ml-1 text-red-300 hover:text-red-600">×</button>
           </span>
           {% endfor %}
-          <input type="text" id="tags-excl-input" placeholder="Ajouter un mot à exclure…"
+          <input type="text" id="tags-excl-input" placeholder="{{ t.ph_add_excl if t else 'Ajouter un mot à exclure…' }}"
                  onkeydown="handleTagKey(event,'excl',true)"
                  class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
         </div>
@@ -165,7 +165,7 @@
   <!-- ===== Recherche (ancienneté) ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">
-      <h2 class="text-base font-semibold text-gray-800">Recherche</h2>
+      <h2 class="text-base font-semibold text-gray-800">{{ t.search_section_title if t else "Recherche" }}</h2>
     </div>
     <form hx-post="/settings/search"
           hx-target="body"
@@ -174,21 +174,21 @@
 
       <div>
         <label for="max_days_old" class="block text-sm font-medium text-gray-700 mb-1">
-          Ancienneté max des offres
+          {{ t.lbl_max_age if t else "Ancienneté max des offres" }}
         </label>
         <select id="max_days_old"
                 name="max_days_old"
                 class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm
                        focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-          <option value="1"  {% if current_user.max_days_old == 1  %}selected{% endif %}>Aujourd&apos;hui (1 jour)</option>
-          <option value="3"  {% if current_user.max_days_old == 3  %}selected{% endif %}>3 jours</option>
-          <option value="7"  {% if current_user.max_days_old == 7  %}selected{% endif %}>7 jours</option>
-          <option value="14" {% if current_user.max_days_old == 14 %}selected{% endif %}>2 semaines</option>
-          <option value="30" {% if current_user.max_days_old == 30 or not current_user.max_days_old %}selected{% endif %}>30 jours (défaut)</option>
-          <option value="0"  {% if current_user.max_days_old == 0  %}selected{% endif %}>Tout (pas de filtre)</option>
+          <option value="1"  {% if current_user.max_days_old == 1  %}selected{% endif %}>{{ t.opt_today if t else "Aujourd'hui (1 jour)" }}</option>
+          <option value="3"  {% if current_user.max_days_old == 3  %}selected{% endif %}>{{ t.opt_3days if t else "3 jours" }}</option>
+          <option value="7"  {% if current_user.max_days_old == 7  %}selected{% endif %}>{{ t.opt_7days if t else "7 jours" }}</option>
+          <option value="14" {% if current_user.max_days_old == 14 %}selected{% endif %}>{{ t.opt_2weeks if t else "2 semaines" }}</option>
+          <option value="30" {% if current_user.max_days_old == 30 or not current_user.max_days_old %}selected{% endif %}>{{ t.opt_30days if t else "30 jours (défaut)" }}</option>
+          <option value="0"  {% if current_user.max_days_old == 0  %}selected{% endif %}>{{ t.opt_all if t else "Tout (pas de filtre)" }}</option>
         </select>
         <p class="mt-1 text-xs text-gray-400">
-          Indeed et LinkedIn filtrent via l&apos;API. WTTJ filtre en post-traitement si le champ date est disponible.
+          {{ t.hint_max_age if t else "Indeed et LinkedIn filtrent via l'API. WTTJ filtre en post-traitement si le champ date est disponible." }}
         </p>
       </div>
 
@@ -196,7 +196,7 @@
         <button type="submit"
                 class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
                        hover:bg-indigo-700 transition-colors">
-          Sauvegarder
+          {{ t.btn_save if t else "Sauvegarder" }}
         </button>
       </div>
     </form>
@@ -209,6 +209,13 @@
       <p class="text-xs text-gray-400 mt-0.5">{{ t.sources_subtitle if t else "Activez une source puis configurez vos mots-clés et localisation." }}</p>
     </div>
     <div class="px-6 py-3 space-y-0" id="sources-section">
+
+      {# Work mode label lookup (used in both source loops below) #}
+      {% set wm_labels = {
+          'remote':  t.work_mode_remote  if t else 'Remote',
+          'hybrid':  t.work_mode_hybrid  if t else 'Hybride',
+          'on-site': t.work_mode_onsite  if t else 'Présentiel'
+      } %}
 
       {# --- Sources Playwright (credentials utilisateur) --- #}
       {% for src_name, src_label, src_desc in [
@@ -236,7 +243,7 @@
         <div id="config-{{ src_name }}"
              class="mt-3 pl-1 space-y-3 source-config-panel hidden">
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Mots-clés de recherche</label>
+            <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_search_kw if t else "Mots-clés de recherche" }}</label>
             <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px]
                         focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
                  id="tags-kw-{{ src_name }}-container" data-src="{{ src_name }}">
@@ -247,14 +254,14 @@
               {% endfor %}
               <input type="text"
                      id="tags-kw-{{ src_name }}-input"
-                     placeholder="Ajouter un mot-clé…"
+                     placeholder="{{ t.ph_add_kw if t else 'Ajouter un mot-clé…' }}"
                      onkeydown="handleSourceTagKey(event,'{{ src_name }}')"
                      class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Localisation</label>
+              <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.location_label if t else "Localisation" }}</label>
               <input type="text"
                      id="loc-{{ src_name }}"
                      value="{{ sc.get('location', '') | e }}"
@@ -263,15 +270,15 @@
                             focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Modes de travail</label>
+              <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_work_modes if t else "Modes de travail" }}</label>
               <div class="flex gap-3 mt-2">
-                {% for mode, label in [('remote','Remote'),('hybrid','Hybride'),('on-site','Présentiel')] %}
+                {% for mode in ['remote', 'hybrid', 'on-site'] %}
                 <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
                   <input type="checkbox"
                          class="work-mode-{{ src_name }} rounded border-gray-300 text-indigo-600"
                          value="{{ mode }}"
                          {% if mode in sc.get('work_modes', ['remote']) %}checked{% endif %}>
-                  {{ label }}
+                  {{ wm_labels[mode] }}
                 </label>
                 {% endfor %}
               </div>
@@ -302,11 +309,11 @@
               {{ src_label }}
               {% if global_creds and key_fields[0] in global_creds %}
               <span class="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
-                <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>Clé Railway
+                <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>{{ t.lbl_railway_key if t else "Clé Railway" }}
               </span>
               {% else %}
               <span class="ml-2 inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
-                <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Clé manquante
+                <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>{{ t.lbl_key_missing if t else "Clé manquante" }}
               </span>
               {% endif %}
             </p>
@@ -316,7 +323,7 @@
             id="toggle-{{ src_name }}"
             onclick="toggleSource('{{ src_name }}')"
             data-source="{{ src_name }}"
-            {% if not (global_creds and key_fields[0] in global_creds) %}disabled title="Clé API manquante côté serveur"{% endif %}
+            {% if not (global_creds and key_fields[0] in global_creds) %}disabled title="{{ t.lbl_api_key_missing_server if t else 'Clé API manquante côté serveur' }}"{% endif %}
             class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
                    transition-colors duration-200 ease-in-out focus:outline-none
                    source-toggle bg-gray-200 {% if not (global_creds and key_fields[0] in global_creds) %}opacity-40 cursor-not-allowed{% endif %}">
@@ -327,7 +334,7 @@
         <div id="config-{{ src_name }}"
              class="mt-3 pl-1 space-y-3 source-config-panel hidden">
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Mots-clés de recherche</label>
+            <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_search_kw if t else "Mots-clés de recherche" }}</label>
             <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px]
                         focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
                  id="tags-kw-{{ src_name }}-container" data-src="{{ src_name }}">
@@ -338,14 +345,14 @@
               {% endfor %}
               <input type="text"
                      id="tags-kw-{{ src_name }}-input"
-                     placeholder="Ajouter un mot-clé…"
+                     placeholder="{{ t.ph_add_kw if t else 'Ajouter un mot-clé…' }}"
                      onkeydown="handleSourceTagKey(event,'{{ src_name }}')"
                      class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Localisation</label>
+              <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.location_label if t else "Localisation" }}</label>
               <input type="text"
                      id="loc-{{ src_name }}"
                      value="{{ sc.get('location', '') | e }}"
@@ -354,15 +361,15 @@
                             focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Modes de travail</label>
+              <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_work_modes if t else "Modes de travail" }}</label>
               <div class="flex gap-3 mt-2">
-                {% for mode, label in [('remote','Remote'),('hybrid','Hybride'),('on-site','Présentiel')] %}
+                {% for mode in ['remote', 'hybrid', 'on-site'] %}
                 <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
                   <input type="checkbox"
                          class="work-mode-{{ src_name }} rounded border-gray-300 text-indigo-600"
                          value="{{ mode }}"
                          {% if mode in sc.get('work_modes', ['remote']) %}checked{% endif %}>
-                  {{ label }}
+                  {{ wm_labels[mode] }}
                 </label>
                 {% endfor %}
               </div>
@@ -389,11 +396,16 @@
       <p class="text-xs text-gray-400 mt-0.5">{{ t.api_keys_subtitle if t else "Chiffrées côté serveur — jamais stockées en clair." }}</p>
     </div>
     <div class="px-6 py-5 space-y-4">
+      {% set _cred_openrouter_hint = t.get('cred_openrouter_hint', 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).') if t else 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).' %}
+      {% set _cred_anthropic_hint = t.get('cred_anthropic_hint', 'Optionnel — si vous préférez Claude directement.') if t else 'Optionnel — si vous préférez Claude directement.' %}
+      {% set _cred_wttj_email_hint = t.get('cred_wttj_email_hint', 'Email de votre compte Welcome to the Jungle (requis pour le scraping).') if t else 'Email de votre compte Welcome to the Jungle (requis pour le scraping).' %}
+      {% set _cred_wttj_password_label = t.get('cred_wttj_password_label', 'WTTJ Mot de passe') if t else 'WTTJ Mot de passe' %}
+      {% set _cred_wttj_password_hint = t.get('cred_wttj_password_hint', 'Mot de passe Welcome to the Jungle.') if t else 'Mot de passe Welcome to the Jungle.' %}
       {% for field_name, field_label, field_hint in [
-          ('openrouter_api_key', 'OpenRouter API Key', 'Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).'),
-          ('anthropic_api_key',  'Anthropic API Key',  'Optionnel — si vous préférez Claude directement.'),
-          ('wttj_email',         'WTTJ Email',         'Email de votre compte Welcome to the Jungle (requis pour le scraping).'),
-          ('wttj_password',      'WTTJ Mot de passe',  'Mot de passe Welcome to the Jungle.'),
+          ('openrouter_api_key', 'OpenRouter API Key', _cred_openrouter_hint),
+          ('anthropic_api_key',  'Anthropic API Key',  _cred_anthropic_hint),
+          ('wttj_email',         'WTTJ Email',         _cred_wttj_email_hint),
+          ('wttj_password',      _cred_wttj_password_label, _cred_wttj_password_hint),
       ] %}
       <div>
         <div class="flex items-center gap-2 mb-1">

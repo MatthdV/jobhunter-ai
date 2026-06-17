@@ -118,7 +118,9 @@ async def _run_scan(user_id: int) -> None:
             }
 
         new_count = 0
-        scan_errors: list[str] = []
+        source_errors: list[str] = []
+        sources_attempted = 0
+
         for source in job_sources:
             source_key = _SOURCE_NAME_MAP.get(source.get("name", ""), "")
             keywords = source.get("search_terms", [])
@@ -150,63 +152,37 @@ async def _run_scan(user_id: int) -> None:
                     "Skipping source %r — missing name or search_terms",
                     source.get("name"),
                 )
-                scan_errors.append(
-                    f"{source.get('name', '?')}: aucun mot-clé configuré (voir Paramètres → Sources)"
-                )
                 continue
 
-            # Validate source_key loads before iterating work_modes
+            scraper = None
             try:
                 if source_key == "wttj":
-                    from src.scrapers.wttj import WTTJScraper as _SC  # noqa: F401
+                    from src.scrapers.wttj import WTTJScraper
+                    scraper = WTTJScraper(user_id=user_id)
                 elif source_key == "indeed":
-                    from src.scrapers import get_indeed_scraper as _SC  # noqa: F401
+                    from src.scrapers import get_indeed_scraper
+                    scraper = get_indeed_scraper(user_id=user_id)
                 elif source_key == "indeed_api":
-                    from src.scrapers.indeed_api import IndeedApiScraper as _SC  # noqa: F401
+                    from src.scrapers.indeed_api import IndeedApiScraper
+                    scraper = IndeedApiScraper(user_id=user_id)
                 elif source_key == "linkedin":
-                    from src.scrapers.linkedin import LinkedInScraper as _SC  # noqa: F401
+                    from src.scrapers.linkedin import LinkedInScraper
+                    scraper = LinkedInScraper(user_id=user_id)
                 elif source_key == "adzuna":
-                    from src.scrapers.adzuna import AdzunaScraper as _SC  # noqa: F401
+                    from src.scrapers.adzuna import AdzunaScraper
+                    scraper = AdzunaScraper(user_id=user_id)
                 elif source_key == "france_travail":
-                    from src.scrapers.france_travail import FranceTravailScraper as _SC  # noqa: F401
-                else:
-                    logger.warning("Unknown source_key %r — skipping", source_key)
-                    continue
+                    from src.scrapers.france_travail import FranceTravailScraper
+                    scraper = FranceTravailScraper(user_id=user_id)
             except Exception as exc:
-                logger.warning("Could not import scraper for %r: %s", source_key, exc)
-                scan_errors.append(f"{source_key}: {exc}")
+                logger.warning("Could not load scraper for %r: %s", source_key, exc)
+                source_errors.append(f"{source_key}: {exc}")
                 continue
 
             from src.scrapers.filters import ScraperFilters
             max_days_old = user.max_days_old if hasattr(user, "max_days_old") else 30
             for work_mode in work_modes:
-                # Fresh scraper per (source, work_mode): ensures __aenter__/__aexit__
-                # are called on a clean object and the browser semaphore slot is
-                # never held across iterations.
-                try:
-                    if source_key == "wttj":
-                        from src.scrapers.wttj import WTTJScraper
-                        scraper = WTTJScraper(user_id=user_id)
-                    elif source_key == "indeed":
-                        from src.scrapers import get_indeed_scraper
-                        scraper = get_indeed_scraper(user_id=user_id)
-                    elif source_key == "indeed_api":
-                        from src.scrapers.indeed_api import IndeedApiScraper
-                        scraper = IndeedApiScraper(user_id=user_id)
-                    elif source_key == "linkedin":
-                        from src.scrapers.linkedin import LinkedInScraper
-                        scraper = LinkedInScraper(user_id=user_id)
-                    elif source_key == "adzuna":
-                        from src.scrapers.adzuna import AdzunaScraper
-                        scraper = AdzunaScraper(user_id=user_id)
-                    else:
-                        from src.scrapers.france_travail import FranceTravailScraper
-                        scraper = FranceTravailScraper(user_id=user_id)
-                except Exception as exc:
-                    logger.warning("Could not instantiate scraper for %r: %s", source_key, exc)
-                    scan_errors.append(f"{source_key}: {exc}")
-                    continue
-
+                sources_attempted += 1
                 mode_filters = ScraperFilters(
                     work_modes=[work_mode],
                     countries=countries,
@@ -232,19 +208,22 @@ async def _run_scan(user_id: int) -> None:
                         new_count += len(fresh)
                 except Exception as exc:
                     logger.exception("Scraper %r mode=%r raised an error", source_key, work_mode)
-                    scan_errors.append(f"{source_key} ({work_mode}): {exc}")
+                    source_errors.append(f"{source_key} ({work_mode}): {exc}")
 
-        if scan_errors and new_count == 0:
+        if sources_attempted > 0 and len(source_errors) == sources_attempted:
+            first = source_errors[0] if source_errors else "unknown"
             tracker.error(
                 "scan",
-                f"All sources failed — first error: {scan_errors[0]}",
+                f"All sources failed — first error: {first}",
                 user_id=user_id,
             )
             return
-        scan_result: dict = {"new_jobs": new_count}
-        if scan_errors:
-            scan_result["source_errors"] = scan_errors[:5]
-        tracker.done("scan", user_id=user_id, result=scan_result)
+
+        tracker.done(
+            "scan",
+            user_id=user_id,
+            result={"new_jobs": new_count, "source_errors": source_errors},
+        )
     except Exception as exc:
         logger.exception("Scan phase failed for user %d", user_id)
         tracker.error("scan", str(exc), user_id=user_id)
@@ -304,16 +283,7 @@ async def _run_match(user_id: int) -> None:
 
         with get_session() as session:
             new_jobs = session.query(Job).filter(Job.id.in_(new_job_ids)).all()
-            scored = await scorer.score_batch(new_jobs, session)
-
-        errors = getattr(scorer, "last_batch_errors", [])
-        if errors and not scored:
-            tracker.error(
-                "match",
-                f"Scoring failed for all {len(errors)} jobs — first error: {errors[0]}",
-                user_id=user_id,
-            )
-            return
+            await scorer.score_batch(new_jobs, session)
 
         with get_session() as session:
             matched_count = (
@@ -322,11 +292,7 @@ async def _run_match(user_id: int) -> None:
                 .count()
             )
 
-        result: dict = {"matched": matched_count}
-        if errors:
-            result["failed"] = len(errors)
-            result["first_error"] = errors[0]
-        tracker.done("match", user_id=user_id, result=result)
+        tracker.done("match", user_id=user_id, result={"matched": matched_count})
     except Exception as exc:
         logger.exception("Match phase failed for user %d", user_id)
         tracker.error("match", str(exc), user_id=user_id)
@@ -537,11 +503,10 @@ async def trigger_match(
         for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
                   "deepseek_api_key", "openrouter_api_key")
     ):
-        # Release the RUNNING slot we just took — otherwise the phase stays
-        # stuck "running" forever and every retry 409s until app restart.
-        _msg = "AI provider API key not configured. Set it in credentials or .env."
-        tracker.error("match", _msg, user_id=current_user.id)
-        raise HTTPException(status_code=400, detail=_msg)
+        raise HTTPException(
+            status_code=400,
+            detail="AI provider API key not configured. Set it in credentials or .env.",
+        )
     background_tasks.add_task(_run_match, current_user.id)
     return PipelineStartResponse(
         status="started",
@@ -564,9 +529,10 @@ async def trigger_apply(
         for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
                   "deepseek_api_key", "openrouter_api_key")
     ):
-        _msg = "AI provider API key not configured. Set it in credentials or .env."
-        tracker.error("apply", _msg, user_id=current_user.id)
-        raise HTTPException(status_code=400, detail=_msg)
+        raise HTTPException(
+            status_code=400,
+            detail="AI provider API key not configured. Set it in credentials or .env.",
+        )
     background_tasks.add_task(_run_apply, current_user.id, dry_run)
     return PipelineStartResponse(
         status="started",
@@ -588,9 +554,10 @@ async def trigger_respond(
         and user_cfg.get("gmail_client_secret")
         and user_cfg.get("gmail_refresh_token")
     ):
-        _msg = "Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token."
-        tracker.error("respond", _msg, user_id=current_user.id)
-        raise HTTPException(status_code=400, detail=_msg)
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token.",
+        )
     background_tasks.add_task(_run_respond, current_user.id)
     return PipelineStartResponse(
         status="started",

@@ -141,6 +141,49 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "block_E": "E — Personnalisation",
         "block_F": "F — Préparation entretien",
 
+        # Profile form labels
+        "lbl_name": "Prénom / Nom",
+        "ph_name": "Prénom Nom",
+        "lbl_job_title": "Titre du poste recherché",
+        "lbl_experience": "Années d'expérience",
+        "lbl_salary_min": "Salaire annuel min (€)",
+        "lbl_salary_max": "Salaire annuel max (€)",
+        "lbl_tjm_min": "TJM min (€/jour)",
+        "lbl_tjm_max": "TJM max (€/jour)",
+        "lbl_optional": "optionnel",
+        "lbl_skills": "Compétences principales",
+        "ph_add_skill": "Ajouter une compétence…",
+        "lbl_excl_keywords": "Mots à exclure",
+        "ph_add_excl": "Ajouter un mot à exclure…",
+
+        # Search section
+        "lbl_max_age": "Ancienneté max des offres",
+        "opt_today": "Aujourd'hui (1 jour)",
+        "opt_3days": "3 jours",
+        "opt_7days": "7 jours",
+        "opt_2weeks": "2 semaines",
+        "opt_30days": "30 jours (défaut)",
+        "opt_all": "Tout (pas de filtre)",
+        "hint_max_age": "Indeed et LinkedIn filtrent via l'API. WTTJ filtre en post-traitement si le champ date est disponible.",
+
+        # Source config labels
+        "lbl_search_kw": "Mots-clés de recherche",
+        "ph_add_kw": "Ajouter un mot-clé…",
+        "lbl_work_modes": "Modes de travail",
+        "work_mode_remote": "Remote",
+        "work_mode_hybrid": "Hybride",
+        "work_mode_onsite": "Présentiel",
+        "lbl_railway_key": "Clé Railway",
+        "lbl_key_missing": "Clé manquante",
+        "lbl_api_key_missing_server": "Clé API manquante côté serveur",
+
+        # Credential field labels/hints
+        "cred_wttj_password_label": "WTTJ Mot de passe",
+        "cred_openrouter_hint": "Requis pour la phase de scoring (Match). Créez un compte sur openrouter.ai (~1$ suffit).",
+        "cred_anthropic_hint": "Optionnel — si vous préférez Claude directement.",
+        "cred_wttj_email_hint": "Email de votre compte Welcome to the Jungle (requis pour le scraping).",
+        "cred_wttj_password_hint": "Mot de passe Welcome to the Jungle.",
+
         # Language toggle
         "lang_toggle_label": "Langue",
     },
@@ -274,6 +317,49 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "block_E": "E — Personalization",
         "block_F": "F — Interview prep",
 
+        # Profile form labels
+        "lbl_name": "First / Last name",
+        "ph_name": "First Last",
+        "lbl_job_title": "Target job title",
+        "lbl_experience": "Years of experience",
+        "lbl_salary_min": "Annual salary min (€)",
+        "lbl_salary_max": "Annual salary max (€)",
+        "lbl_tjm_min": "Daily rate min (€/day)",
+        "lbl_tjm_max": "Daily rate max (€/day)",
+        "lbl_optional": "optional",
+        "lbl_skills": "Main skills",
+        "ph_add_skill": "Add a skill…",
+        "lbl_excl_keywords": "Words to exclude",
+        "ph_add_excl": "Add word to exclude…",
+
+        # Search section
+        "lbl_max_age": "Max job age",
+        "opt_today": "Today (1 day)",
+        "opt_3days": "3 days",
+        "opt_7days": "7 days",
+        "opt_2weeks": "2 weeks",
+        "opt_30days": "30 days (default)",
+        "opt_all": "All (no filter)",
+        "hint_max_age": "Indeed and LinkedIn filter via API. WTTJ filters in post-processing if the date field is available.",
+
+        # Source config labels
+        "lbl_search_kw": "Search keywords",
+        "ph_add_kw": "Add a keyword…",
+        "lbl_work_modes": "Work modes",
+        "work_mode_remote": "Remote",
+        "work_mode_hybrid": "Hybrid",
+        "work_mode_onsite": "On-site",
+        "lbl_railway_key": "Railway key",
+        "lbl_key_missing": "Key missing",
+        "lbl_api_key_missing_server": "API key missing on server",
+
+        # Credential field labels/hints
+        "cred_wttj_password_label": "WTTJ Password",
+        "cred_openrouter_hint": "Required for the scoring phase (Match). Create an account on openrouter.ai (~$1 is enough).",
+        "cred_anthropic_hint": "Optional — if you prefer Claude directly.",
+        "cred_wttj_email_hint": "Your Welcome to the Jungle account email (required for scraping).",
+        "cred_wttj_password_hint": "Your Welcome to the Jungle password.",
+
         # Language toggle
         "lang_toggle_label": "Language",
     },
@@ -406,6 +492,49 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "block_D": "D — Compensación",
         "block_E": "E — Personalización",
         "block_F": "F — Preparación entrevista",
+
+        # Profile form labels
+        "lbl_name": "Nombre / Apellido",
+        "ph_name": "Nombre Apellido",
+        "lbl_job_title": "Título del puesto buscado",
+        "lbl_experience": "Años de experiencia",
+        "lbl_salary_min": "Salario anual mín (€)",
+        "lbl_salary_max": "Salario anual máx (€)",
+        "lbl_tjm_min": "TMD mín (€/día)",
+        "lbl_tjm_max": "TMD máx (€/día)",
+        "lbl_optional": "opcional",
+        "lbl_skills": "Habilidades principales",
+        "ph_add_skill": "Añadir una habilidad…",
+        "lbl_excl_keywords": "Palabras a excluir",
+        "ph_add_excl": "Añadir palabra a excluir…",
+
+        # Search section
+        "lbl_max_age": "Antigüedad máx de las ofertas",
+        "opt_today": "Hoy (1 día)",
+        "opt_3days": "3 días",
+        "opt_7days": "7 días",
+        "opt_2weeks": "2 semanas",
+        "opt_30days": "30 días (defecto)",
+        "opt_all": "Todo (sin filtro)",
+        "hint_max_age": "Indeed y LinkedIn filtran por API. WTTJ filtra en post-procesamiento si el campo fecha está disponible.",
+
+        # Source config labels
+        "lbl_search_kw": "Palabras clave de búsqueda",
+        "ph_add_kw": "Añadir una palabra clave…",
+        "lbl_work_modes": "Modos de trabajo",
+        "work_mode_remote": "Remoto",
+        "work_mode_hybrid": "Híbrido",
+        "work_mode_onsite": "Presencial",
+        "lbl_railway_key": "Clave Railway",
+        "lbl_key_missing": "Clave faltante",
+        "lbl_api_key_missing_server": "Clave API faltante en servidor",
+
+        # Credential field labels/hints
+        "cred_wttj_password_label": "WTTJ Contraseña",
+        "cred_openrouter_hint": "Requerido para la fase de puntuación (Match). Crea una cuenta en openrouter.ai (~1$ es suficiente).",
+        "cred_anthropic_hint": "Opcional — si prefieres Claude directamente.",
+        "cred_wttj_email_hint": "Email de tu cuenta Welcome to the Jungle (requerido para el scraping).",
+        "cred_wttj_password_hint": "Contraseña de Welcome to the Jungle.",
 
         # Language toggle
         "lang_toggle_label": "Idioma",

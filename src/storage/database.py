@@ -92,12 +92,24 @@ def _migrate_schema(engine: Engine) -> None:
     """
     new_columns = [
         ("users", "max_days_old INTEGER DEFAULT 30"),
+        # Multi-tenant columns added after initial deploy
+        ("applications", "user_id INTEGER REFERENCES users(id)"),
+        ("companies", "user_id INTEGER REFERENCES users(id)"),
+        ("companies", "funding_stage VARCHAR(50)"),
+        ("companies", "tech_stack_signals TEXT"),
+        ("companies", "culture_signals TEXT"),
+        ("companies", "glassdoor_rating FLOAT"),
+        ("companies", "growth_signals TEXT"),
+        ("companies", "red_flags TEXT"),
+        ("companies", "researched_at DATETIME"),
+        ("recruiters", "user_id INTEGER REFERENCES users(id)"),
     ]
     with engine.connect() as conn:
         for table, col_def in new_columns:
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_def}"))
                 conn.commit()
+                logger.info("Migrated: added column %s to %s", col_def.split()[0], table)
             except Exception:
                 pass  # column already exists
 
