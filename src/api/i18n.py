@@ -17,6 +17,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_dashboard": "Dashboard",
         "nav_jobs": "Offres",
         "nav_settings": "Paramètres",
+        "nav_logout": "Déconnexion",
 
         # Stats
         "stat_scanned": "Scannées",
@@ -193,6 +194,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_dashboard": "Dashboard",
         "nav_jobs": "Jobs",
         "nav_settings": "Settings",
+        "nav_logout": "Sign out",
 
         # Stats
         "stat_scanned": "Scanned",
@@ -369,6 +371,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_dashboard": "Panel",
         "nav_jobs": "Ofertas",
         "nav_settings": "Configuración",
+        "nav_logout": "Cerrar sesión",
 
         # Stats
         "stat_scanned": "Escaneadas",
