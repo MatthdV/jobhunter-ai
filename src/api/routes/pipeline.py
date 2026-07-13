@@ -90,6 +90,57 @@ def _load_job_sources_for_user(user: User) -> list[dict]:
     return _DEFAULT_JOB_SOURCES
 
 
+def _attach_company_and_poster(session, job: Job, user_id: int) -> None:
+    """Resolve the scraper's transient company/poster attributes into DB rows.
+
+    Scrapers attach `company_name` and optionally `poster_name`/`poster_title`/
+    `poster_linkedin_url` (LinkedIn job poster) as transient attributes.
+    """
+    from datetime import datetime, timezone
+
+    from src.storage.models import Company, Recruiter
+
+    company_name = (getattr(job, "company_name", None) or "").strip()
+    if not company_name:
+        return
+    company = (
+        session.query(Company)
+        .filter(Company.name == company_name, Company.user_id == user_id)
+        .one_or_none()
+    )
+    if company is None:
+        company = Company(name=company_name, user_id=user_id)
+        session.add(company)
+        session.flush()
+    job.company_id = company.id
+
+    poster_name = (getattr(job, "poster_name", None) or "").strip()
+    if not poster_name:
+        return
+    # The job poster is a first-class recruiter contact — better than any
+    # external lookup. One recruiter per company (same slot the finder uses).
+    existing = (
+        session.query(Recruiter)
+        .filter(Recruiter.company_id == company.id, Recruiter.user_id == user_id)
+        .order_by(Recruiter.id)
+        .first()
+    )
+    if existing is not None and existing.source == "linkedin_poster":
+        return  # keep the first poster found; don't flip-flop between postings
+    if existing is None:
+        existing = Recruiter(user_id=user_id, company_id=company.id)
+        session.add(existing)
+    # A poster beats any Hunter/Brave result — overwrite (keep a found email).
+    existing.name = poster_name
+    existing.title = getattr(job, "poster_title", None)
+    existing.linkedin_url = getattr(job, "poster_linkedin_url", None)
+    existing.source = "linkedin_poster"
+    existing.confidence = 0.95
+    existing.found_at = datetime.now(timezone.utc)
+    company.recruiter_search_status = "found"
+    company.recruiter_searched_at = datetime.now(timezone.utc)
+
+
 def _load_user(user_id: int) -> User | None:
     """Load a User from DB by id — used at start of background tasks."""
     with get_session() as session:
@@ -211,6 +262,12 @@ async def _run_scan(user_id: int) -> None:
                             for job in fresh:
                                 job.user_id = user_id  # type: ignore[assignment]
                                 session.add(job)
+                                try:
+                                    _attach_company_and_poster(session, job, user_id)
+                                except Exception:
+                                    logger.exception(
+                                        "Company/poster attach failed for %r", job.url
+                                    )
                                 existing_urls.add(job.url)
                         new_count += len(fresh)
                 except Exception as exc:

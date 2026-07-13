@@ -235,9 +235,7 @@ class LinkedInScraper(BaseScraper):
             ):
                 is_remote = True
 
-            # company is stored as a relationship (company_id FK); skip here —
-            # the company enrichment phase handles Company creation separately.
-            return Job(
+            job = Job(
                 title=title,
                 url=url,
                 source=self.source,
@@ -246,6 +244,28 @@ class LinkedInScraper(BaseScraper):
                 contract_type=contract_type,
                 is_remote=is_remote,
             )
+            # Transient attributes (not columns) — resolved into Company /
+            # Recruiter rows by the scan persistence step.
+            job.company_name = company  # type: ignore[attr-defined]
+
+            # "Message the recruiter" block: the guest API exposes the job
+            # poster (name, title, profile URL) for many postings — a direct,
+            # high-confidence recruiter contact.
+            poster = soup.select_one(".message-the-recruiter")
+            if poster is not None:
+                name_el = poster.select_one(".base-main-card__title")
+                title_el2 = poster.select_one(".base-main-card__subtitle")
+                link_el = poster.select_one("a.base-card__full-link[href]")
+                if name_el is not None:
+                    job.poster_name = name_el.get_text(strip=True)  # type: ignore[attr-defined]
+                    job.poster_title = (  # type: ignore[attr-defined]
+                        title_el2.get_text(strip=True) if title_el2 else None
+                    )
+                    job.poster_linkedin_url = (  # type: ignore[attr-defined]
+                        link_el["href"].split("?")[0] if link_el else None
+                    )
+
+            return job
 
         except ParseError:
             raise

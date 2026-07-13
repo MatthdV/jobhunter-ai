@@ -198,7 +198,7 @@ class AdzunaScraper(BaseScraper):
             # Determine country from the company/location data
             country_code = "GB"  # default; caller sets this via search()
 
-            return Job(
+            job = Job(
                 title=title,
                 url=url,
                 source=self.source,
@@ -211,6 +211,8 @@ class AdzunaScraper(BaseScraper):
                 contract_type=contract_type,
                 country_code=country_code,
             )
+            job.company_name = (raw.get("company") or {}).get("display_name") or None  # type: ignore[attr-defined]
+            return job
 
         except ParseError:
             raise

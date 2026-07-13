@@ -159,6 +159,7 @@ class FranceTravailScraper(BaseScraper):
         )
 
         company: str | None = (raw.get("entreprise") or {}).get("nom") or None
+        # (also attached to the returned Job as a transient company_name below)
 
         lieu = raw.get("lieuTravail") or {}
         location_str: str | None = lieu.get("libelle") or None
@@ -178,7 +179,7 @@ class FranceTravailScraper(BaseScraper):
         elif company:
             description = f"[{company}]"
 
-        return Job(
+        job = Job(
             title=title,
             url=url,
             source=self.source,
@@ -189,6 +190,8 @@ class FranceTravailScraper(BaseScraper):
             salary_raw=salary_raw_str,
             contract_type=contract_type,
         )
+        job.company_name = company  # type: ignore[attr-defined]
+        return job
 
     def _check_response(self, response: httpx.Response) -> None:
         if response.status_code == 429:

@@ -311,7 +311,7 @@ class WTTJScraper(BaseScraper):
                 or None
             )
 
-            return Job(
+            job = Job(
                 title=title,
                 url=url,
                 source=self.source,
@@ -325,6 +325,11 @@ class WTTJScraper(BaseScraper):
                 country_code="FR",
                 salary_currency="EUR",
             )
+            org = raw.get("organization") or {}
+            job.company_name = (  # type: ignore[attr-defined]
+                org.get("name") or raw.get("company_name") or None
+            )
+            return job
 
         except ParseError:
             raise
