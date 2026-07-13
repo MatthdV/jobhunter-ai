@@ -27,12 +27,21 @@ _SessionLocal: sessionmaker[Session] | None = None
 def _make_engine(url: str) -> Engine:
     connect_args: dict[str, bool] = {}
     is_sqlite = url.startswith("sqlite")
+    engine_kwargs: dict = {}
     if is_sqlite:
         connect_args = {"check_same_thread": False}
+        if ":memory:" in url:
+            # A plain :memory: engine gives every pooled connection its own
+            # empty database — tables created by init_db() vanish for the
+            # next session. StaticPool pins a single shared connection.
+            from sqlalchemy.pool import StaticPool
+
+            engine_kwargs["poolclass"] = StaticPool
     engine = create_engine(
         url,
         connect_args=connect_args,
         echo=(settings.log_level == "DEBUG"),
+        **engine_kwargs,
     )
     if is_sqlite:
         # Enable WAL mode on every new connection.

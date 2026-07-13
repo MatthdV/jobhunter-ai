@@ -8,12 +8,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware.error_handler import http_exception_handler
 from api.routes.health import router as health_router
+from src.storage import database as _db
 from src.storage.database import configure, init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    configure()
+    # Only configure from settings when no engine exists yet — an
+    # unconditional configure() would override a test-configured in-memory
+    # engine and point every session (and the teardown drop_all!) at the
+    # real file database.
+    if _db._engine is None:
+        configure()
     init_db()
     yield
 
