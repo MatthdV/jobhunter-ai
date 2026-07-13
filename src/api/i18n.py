@@ -164,6 +164,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recruiter_auto_find_label": "Chercher automatiquement le recruteur après chaque phase Match (5 entreprises max par run)",
         "cred_hunter_hint": "Optionnel — trouve nom + email vérifié du recruteur (hunter.io, free tier).",
         "cred_brave_hint": "Optionnel — recherche du profil LinkedIn du recruteur (brave.com/search/api, free tier).",
+        "cred_google_cse_hint": "Optionnel — recherche LinkedIn du recruteur via Google (100 req/jour gratuit, console.cloud.google.com).",
+        "cred_google_cx_hint": "ID du moteur Programmable Search Engine (programmablesearchengine.google.com).",
 
         # Profile form labels
         "lbl_name": "Prénom / Nom",
@@ -364,6 +366,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recruiter_auto_find_label": "Automatically search for the recruiter after each Match phase (max 5 companies per run)",
         "cred_hunter_hint": "Optional — finds the recruiter's name + verified email (hunter.io, free tier).",
         "cred_brave_hint": "Optional — finds the recruiter's LinkedIn profile (brave.com/search/api, free tier).",
+        "cred_google_cse_hint": "Optional — finds the recruiter's LinkedIn profile via Google (100 free queries/day, console.cloud.google.com).",
+        "cred_google_cx_hint": "Programmable Search Engine ID (programmablesearchengine.google.com).",
 
         # Profile form labels
         "lbl_name": "First / Last name",
@@ -564,6 +568,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recruiter_auto_find_label": "Buscar automáticamente al recruiter tras cada fase Match (máx. 5 empresas por ejecución)",
         "cred_hunter_hint": "Opcional — encuentra nombre + email verificado del recruiter (hunter.io, free tier).",
         "cred_brave_hint": "Opcional — encuentra el perfil de LinkedIn del recruiter (brave.com/search/api, free tier).",
+        "cred_google_cse_hint": "Opcional — encuentra el perfil de LinkedIn del recruiter vía Google (100 consultas/día gratis, console.cloud.google.com).",
+        "cred_google_cx_hint": "ID del motor Programmable Search Engine (programmablesearchengine.google.com).",
 
         # Profile form labels
         "lbl_name": "Nombre / Apellido",

@@ -7,6 +7,7 @@ import pytest
 from src.analysis import recruiter_finder as rf
 from src.analysis.recruiter_finder import (
     BraveLLMProvider,
+    GoogleCSEProvider,
     HunterProvider,
     RecruiterCandidate,
     RecruiterFinder,
@@ -184,6 +185,61 @@ async def test_brave_llm_filters_non_profile_urls():
     _FakeAsyncClient.payload = _brave_payload(["https://linkedin.com/company/acme"])
     llm = _FakeLLM('{"best_index": 0, "name": "X", "confidence": 0.9}')
     assert await BraveLLMProvider("k", llm).find("Acme", None, "x") == []
+
+
+# ---------------------------------------------------------------------------
+# GoogleCSEProvider
+# ---------------------------------------------------------------------------
+
+
+def _google_payload(urls: list[str]) -> dict:
+    return {
+        "items": [
+            {"title": f"Profile {i}", "link": u, "snippet": "desc"}
+            for i, u in enumerate(urls)
+        ]
+    }
+
+
+async def test_google_cse_picks_url_from_serp():
+    urls = ["https://linkedin.com/in/a", "https://linkedin.com/in/b"]
+    _FakeAsyncClient.payload = _google_payload(urls)
+    llm = _FakeLLM(json.dumps(
+        {"best_index": 0, "name": "Ana Ruiz", "title": "Talent Acquisition",
+         "confidence": 0.7, "reasoning": "match"}
+    ))
+    cands = await GoogleCSEProvider("k", "cx-id", llm).find("Acme", None, "AI Engineer")
+    assert len(cands) == 1
+    assert cands[0].linkedin_url == urls[0]
+    assert cands[0].source == "google_llm"
+    assert cands[0].confidence == 0.7
+    assert _FakeAsyncClient.last_params["cx"] == "cx-id"
+    assert _FakeAsyncClient.last_params["num"] == 10
+
+
+async def test_google_cse_http_error_returns_empty():
+    _FakeAsyncClient.status_code = 403  # quota exceeded / bad key
+    llm = _FakeLLM("{}")
+    assert await GoogleCSEProvider("k", "cx", llm).find("Acme", None, "x") == []
+
+
+def test_from_user_settings_provider_order():
+    llm = _FakeLLM("{}")
+    finder = RecruiterFinder.from_user_settings(
+        {"hunter_api_key": "h", "google_cse_api_key": "g", "google_cse_cx": "cx",
+         "brave_api_key": "b"},
+        llm,
+    )
+    names = [p.name for p in finder._providers]
+    assert names == ["hunter", "google_llm", "brave_llm"]
+
+
+def test_from_user_settings_google_requires_both_keys():
+    llm = _FakeLLM("{}")
+    finder = RecruiterFinder.from_user_settings(
+        {"google_cse_api_key": "g", "google_cse_cx": ""}, llm
+    )
+    assert not finder.has_providers
 
 
 # ---------------------------------------------------------------------------
