@@ -18,8 +18,7 @@
                  {% if (recruiter.confidence or 0) >= 0.75 %}bg-emerald-50 text-emerald-700
                  {% elif (recruiter.confidence or 0) >= 0.5 %}bg-amber-50 text-amber-700
                  {% else %}bg-gray-100 text-gray-500{% endif %}">
-      {% set _source_labels = {"hunter": "Hunter", "google_llm": "LinkedIn/Google", "brave_llm": "LinkedIn/Brave"} %}
-      {{ _source_labels.get(recruiter.source, recruiter.source) }}
+      {{ "Hunter" if recruiter.source == "hunter" else "LinkedIn/Brave" }}
       {% if recruiter.confidence is not none %}— {{ (recruiter.confidence * 100) | round | int }}%{% endif %}
     </span>
     {% endif %}

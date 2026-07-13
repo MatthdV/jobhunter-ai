@@ -363,11 +363,7 @@ def _recruiter_keys_configured(user: User) -> bool:
     from src.api.user_settings import get_settings_for_user
 
     cfg = get_settings_for_user(user)
-    return bool(
-        cfg.get("hunter_api_key")
-        or cfg.get("brave_api_key")
-        or (cfg.get("google_cse_api_key") and cfg.get("google_cse_cx"))
-    )
+    return bool(cfg.get("hunter_api_key") or cfg.get("brave_api_key"))
 
 
 def _recruiter_section_context(session, job: Job, user: User) -> dict:

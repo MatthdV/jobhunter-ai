@@ -31,8 +31,6 @@ _CREDENTIAL_FIELDS = (
     "wttj_password",
     "hunter_api_key",
     "brave_api_key",
-    "google_cse_api_key",
-    "google_cse_cx",
 )
 
 
@@ -69,8 +67,6 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
         "wttj_password": "",
         "hunter_api_key": "",
         "brave_api_key": "",
-        "google_cse_api_key": "",
-        "google_cse_cx": "",
         # Railway-only keys — never overridden per-user
         "indeed_api_key": settings.indeed_api_key,
         "adzuna_app_id": settings.adzuna_app_id,

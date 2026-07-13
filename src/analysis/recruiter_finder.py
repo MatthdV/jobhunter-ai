@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 _HUNTER_URL = "https://api.hunter.io/v2/domain-search"
 _BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
-_GOOGLE_CSE_URL = "https://www.googleapis.com/customsearch/v1"
 _HTTP_TIMEOUT = 25.0
 
 # Keywords marking a recruiting-related position (EN + FR).
@@ -245,36 +244,12 @@ class _SearchLLMProvider:
         ]
 
 
-class GoogleCSEProvider(_SearchLLMProvider):
-    """Google Programmable Search (Custom Search JSON API) — 100 free queries/day."""
-
-    name = "google_llm"
-
-    def __init__(self, api_key: str, cx: str, llm_client: LLMClient) -> None:
-        super().__init__(llm_client)
-        self._api_key = api_key
-        self._cx = cx
-
-    async def _search(self, query: str) -> list[dict]:
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            resp = await client.get(
-                _GOOGLE_CSE_URL,
-                params={"key": self._api_key, "cx": self._cx, "q": query, "num": 10},
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("link", ""),
-                "description": r.get("snippet", ""),
-            }
-            for r in payload.get("items", []) or []
-        ]
-
-
 class BraveLLMProvider(_SearchLLMProvider):
-    """Brave Search API — requires a card even on the free tier."""
+    """Brave Search API — free tier 2000 req/month.
+
+    Note: Google Custom Search JSON API was evaluated as an alternative but is
+    closed to new customers since 2026 (shutdown announced for 2027-01).
+    """
 
     name = "brave_llm"
 
@@ -317,14 +292,6 @@ class RecruiterFinder:
         providers: list[RecruiterProvider] = []
         if user_cfg.get("hunter_api_key"):
             providers.append(HunterProvider(user_cfg["hunter_api_key"]))
-        if (
-            user_cfg.get("google_cse_api_key")
-            and user_cfg.get("google_cse_cx")
-            and llm_client is not None
-        ):
-            providers.append(GoogleCSEProvider(
-                user_cfg["google_cse_api_key"], user_cfg["google_cse_cx"], llm_client
-            ))
         if user_cfg.get("brave_api_key") and llm_client is not None:
             providers.append(BraveLLMProvider(user_cfg["brave_api_key"], llm_client))
         return cls(providers)

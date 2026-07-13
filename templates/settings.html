@@ -403,16 +403,12 @@
       {% set _cred_wttj_password_hint = t.get('cred_wttj_password_hint', 'Mot de passe Welcome to the Jungle.') if t else 'Mot de passe Welcome to the Jungle.' %}
       {% set _cred_hunter_hint = t.get('cred_hunter_hint', 'Optionnel — trouve nom + email vérifié du recruteur (hunter.io, free tier).') if t else 'Optionnel — trouve nom + email vérifié du recruteur (hunter.io, free tier).' %}
       {% set _cred_brave_hint = t.get('cred_brave_hint', 'Optionnel — recherche du profil LinkedIn du recruteur (brave.com/search/api, free tier).') if t else 'Optionnel — recherche du profil LinkedIn du recruteur (brave.com/search/api, free tier).' %}
-      {% set _cred_google_cse_hint = t.get('cred_google_cse_hint', 'Optionnel — recherche LinkedIn du recruteur via Google (100 req/jour gratuit, console.cloud.google.com).') if t else 'Optionnel — recherche LinkedIn du recruteur via Google (100 req/jour gratuit, console.cloud.google.com).' %}
-      {% set _cred_google_cx_hint = t.get('cred_google_cx_hint', 'ID du moteur Programmable Search Engine (programmablesearchengine.google.com).') if t else 'ID du moteur Programmable Search Engine (programmablesearchengine.google.com).' %}
       {% for field_name, field_label, field_hint in [
           ('openrouter_api_key', 'OpenRouter API Key', _cred_openrouter_hint),
           ('anthropic_api_key',  'Anthropic API Key',  _cred_anthropic_hint),
           ('wttj_email',         'WTTJ Email',         _cred_wttj_email_hint),
           ('wttj_password',      _cred_wttj_password_label, _cred_wttj_password_hint),
           ('hunter_api_key',     'Hunter.io API Key',  _cred_hunter_hint),
-          ('google_cse_api_key', 'Google CSE API Key', _cred_google_cse_hint),
-          ('google_cse_cx',      'Google CSE — ID moteur (cx)', _cred_google_cx_hint),
           ('brave_api_key',      'Brave Search API Key', _cred_brave_hint),
       ] %}
       <div>
@@ -656,7 +652,7 @@
   // Credentials save
   // ────────────────────────────────────────────────────────
   async function saveCredentials() {
-    const fields = ['openrouter_api_key', 'anthropic_api_key', 'wttj_email', 'wttj_password', 'hunter_api_key', 'google_cse_api_key', 'google_cse_cx', 'brave_api_key'];
+    const fields = ['openrouter_api_key', 'anthropic_api_key', 'wttj_email', 'wttj_password', 'hunter_api_key', 'brave_api_key'];
     const credentials = {};
     fields.forEach(f => {
       const el = document.getElementById('cred-' + f);

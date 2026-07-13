@@ -355,9 +355,7 @@ async def _run_match(user_id: int) -> None:
             )
 
         if user.recruiter_auto_find and (
-            user_cfg.get("hunter_api_key")
-            or user_cfg.get("brave_api_key")
-            or (user_cfg.get("google_cse_api_key") and user_cfg.get("google_cse_cx"))
+            user_cfg.get("hunter_api_key") or user_cfg.get("brave_api_key")
         ):
             await _auto_find_recruiters(user_id)
 
