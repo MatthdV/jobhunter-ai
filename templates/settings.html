@@ -674,8 +674,20 @@
           const el = document.getElementById('cred-' + f);
           if (el) el.value = '';
         });
-        showToast('Clés sauvegardées', 'success');
-        setTimeout(() => location.reload(), 800);
+        const data = await res.json().catch(() => ({}));
+        const checks = data.checks || {};
+        const labels = {ok: '✓', invalid: '✗ clé invalide', unreachable: '? injoignable', untested: 'non testée'};
+        const bad = Object.entries(checks).filter(([, s]) => s === 'invalid');
+        const summary = Object.entries(checks)
+          .map(([k, s]) => k.replace(/_api_key$|_/g, ' ').trim() + ' : ' + (labels[s] || s))
+          .join(' — ');
+        if (bad.length > 0) {
+          showToast('Clés sauvegardées, mais ' + summary, 'error');
+          setTimeout(() => location.reload(), 4000);
+        } else {
+          showToast('Clés sauvegardées' + (summary ? ' — ' + summary : ''), 'success');
+          setTimeout(() => location.reload(), 2500);
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         showToast('Erreur : ' + (err.detail || 'inconnue'), 'error');

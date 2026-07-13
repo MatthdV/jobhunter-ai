@@ -192,6 +192,9 @@ class CredentialsOut(BaseModel):
     """Which credential fields the user has stored (names only, not values)."""
     stored_keys: list[str]
     available_keys: list[str]  # all possible credential fields
+    # Live check results for keys provided in this request:
+    # "ok" | "invalid" | "unreachable" | "untested"
+    checks: dict[str, str] = {}
 
 
 class CredentialsIn(BaseModel):
@@ -210,7 +213,7 @@ def get_credentials(current_user: User = Depends(get_current_user)) -> Credentia
 
 
 @router.put("/credentials", response_model=CredentialsOut)
-def update_credentials(
+async def update_credentials(
     body: CredentialsIn,
     current_user: User = Depends(get_current_user),
 ) -> CredentialsOut:
@@ -218,6 +221,8 @@ def update_credentials(
 
     Only the provided keys are updated; existing keys not in the request
     are preserved. Requires FERNET_KEY to be set on the instance.
+    Each provided key is live-checked against its provider (best effort) and
+    the result is returned in `checks` — the save happens regardless.
     """
     if not settings.fernet_key:
         raise HTTPException(
@@ -255,10 +260,20 @@ def update_credentials(
             raise HTTPException(status_code=404, detail="User not found")
         user.encrypted_keys = encrypted_blob  # type: ignore[assignment]
 
+    # Live-check the keys provided in this request (best effort, never blocks the save)
+    from src.api.credential_validator import validate_credentials
+
+    try:
+        checks = await validate_credentials(body.credentials)
+    except Exception:
+        logger.exception("Credential validation failed")
+        checks = {}
+
     stored = [k for k in _CREDENTIAL_FIELDS if existing.get(k)]
     return CredentialsOut(
         stored_keys=stored,
         available_keys=list(_CREDENTIAL_FIELDS),
+        checks=checks,
     )
 
 
