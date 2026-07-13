@@ -77,6 +77,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "followup_generate": "Générer une relance",
         "settings_followup_delay": "Délai de relance (jours sans réponse)",
 
+        # Channel analytics
+        "channels_title": "Taux de réponse par canal",
+        "channel_poster": "Recruteur de l'offre contacté",
+        "channel_recruiter_email": "Email direct recruteur",
+        "channel_portal": "Apply portail",
+        "channel_sent": "envoyées",
+        "channel_na_note": "Réponses non traçables pour les candidatures portail",
+
         # Job detail
         "back_dashboard": "Dashboard",
         "job_view_offer": "Voir l'offre",
@@ -297,6 +305,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "followup_generate": "Generate a follow-up",
         "settings_followup_delay": "Follow-up delay (days without reply)",
 
+        # Channel analytics
+        "channels_title": "Response rate by channel",
+        "channel_poster": "Job poster contacted",
+        "channel_recruiter_email": "Direct recruiter email",
+        "channel_portal": "Portal apply",
+        "channel_sent": "sent",
+        "channel_na_note": "Replies not trackable for portal applications",
+
         # Job detail
         "back_dashboard": "Dashboard",
         "job_view_offer": "View job",
@@ -516,6 +532,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "followup_pitch": "Sin respuesta — genera un seguimiento cortés en el mismo hilo.",
         "followup_generate": "Generar un seguimiento",
         "settings_followup_delay": "Plazo de seguimiento (días sin respuesta)",
+
+        # Channel analytics
+        "channels_title": "Tasa de respuesta por canal",
+        "channel_poster": "Reclutador de la oferta contactado",
+        "channel_recruiter_email": "Email directo al reclutador",
+        "channel_portal": "Postulación por portal",
+        "channel_sent": "enviadas",
+        "channel_na_note": "Respuestas no rastreables para postulaciones por portal",
 
         # Job detail
         "back_dashboard": "Panel",

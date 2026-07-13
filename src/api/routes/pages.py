@@ -81,6 +81,65 @@ def _onboarding_state(user: User) -> dict[str, bool]:
     return {"profile": profile_done, "api_key": key_done, "search_terms": sources_done}
 
 
+_CHANNEL_BASE_STATUSES = [
+    ApplicationStatus.SUBMITTED,
+    ApplicationStatus.REPLIED,
+    ApplicationStatus.INTERVIEW,
+    ApplicationStatus.OFFER,
+]
+_CHANNEL_REPLY_STATUSES = [
+    ApplicationStatus.REPLIED,
+    ApplicationStatus.INTERVIEW,
+    ApplicationStatus.OFFER,
+]
+
+
+def channel_stats(session, user_id: int) -> list[dict]:
+    """Response-rate stats per outreach channel.
+
+    Channels: poster (Recruiter.source == linkedin_poster), recruiter_email
+    (hunter / brave_llm), portal (no recruiter linked). Portal replies are not
+    observable by the system (no gmail_thread_id) → na=True, rate stays None.
+    """
+    from sqlalchemy import func
+
+    rows = (
+        session.query(Application.status, Recruiter.source, func.count(Application.id))
+        .outerjoin(Recruiter, Application.recruiter_id == Recruiter.id)
+        .filter(
+            Application.user_id == user_id,
+            Application.status.in_(_CHANNEL_BASE_STATUSES),
+        )
+        .group_by(Application.status, Recruiter.source)
+        .all()
+    )
+
+    buckets: dict[str, dict] = {
+        key: {"key": key, "sent": 0, "replies": 0}
+        for key in ("poster", "recruiter_email", "portal")
+    }
+    for status, source, count in rows:
+        if source is None:
+            key = "portal"
+        elif source == "linkedin_poster":
+            key = "poster"
+        else:
+            key = "recruiter_email"
+        buckets[key]["sent"] += count
+        if status in _CHANNEL_REPLY_STATUSES:
+            buckets[key]["replies"] += count
+
+    channels = []
+    for key in ("poster", "recruiter_email", "portal"):
+        b = buckets[key]
+        na = key == "portal"
+        rate = None
+        if not na and b["sent"] > 0:
+            rate = round(b["replies"] * 100 / b["sent"])
+        channels.append({**b, "rate": rate, "na": na})
+    return channels
+
+
 def _build_stats(user_id: int) -> dict:
     """Build stats dict for template context, filtered to *user_id*."""
     today_start = datetime.combine(date.today(), _time.min)
@@ -146,6 +205,7 @@ def _build_stats(user_id: int) -> dict:
             )
             .count()
         )
+        channels = channel_stats(session, user_id)
 
     # Use simple namespace-style object so templates can access .today.scanned etc.
     class NS:
@@ -166,6 +226,7 @@ def _build_stats(user_id: int) -> dict:
     stats_ns = NS()
     stats_ns.today = today_ns  # type: ignore[attr-defined]
     stats_ns.total = total_ns  # type: ignore[attr-defined]
+    stats_ns.channels = channels  # type: ignore[attr-defined]
     stats_ns.pipeline_status = {  # type: ignore[attr-defined]
         phase: info for phase, info in tracker.all(user_id=user_id).items()
     }

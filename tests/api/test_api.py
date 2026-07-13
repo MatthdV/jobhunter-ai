@@ -185,6 +185,66 @@ class TestStats:
         assert data["today"]["scanned"] == 1
         assert data["total"]["scanned"] == 2
 
+    @staticmethod
+    def _seed_channel_app(url: str, status: ApplicationStatus,
+                          source: str | None = None) -> None:
+        """One job + application; when source given, link a recruiter."""
+        with get_session() as session:
+            company = Company(name=f"Co-{url[-1]}", user_id=_TEST_USER_ID)
+            session.add(company)
+            session.flush()
+            recruiter_id = None
+            if source:
+                rec = Recruiter(name="R", email=f"r{url[-1]}@co.io", source=source,
+                                confidence=0.9, user_id=_TEST_USER_ID,
+                                company_id=company.id)
+                session.add(rec)
+                session.flush()
+                recruiter_id = rec.id
+            job = _make_job(url=url, company=company)
+            session.add(job)
+            session.flush()
+            session.add(Application(job_id=job.id, user_id=_TEST_USER_ID,
+                                    status=status, recruiter_id=recruiter_id,
+                                    created_at=datetime.utcnow(),
+                                    updated_at=datetime.utcnow()))
+
+    def test_channel_stats_derivation(self, client: TestClient):
+        self._seed_channel_app("https://example.com/1", ApplicationStatus.SUBMITTED)  # portal
+        self._seed_channel_app("https://example.com/2", ApplicationStatus.REPLIED,
+                               source="linkedin_poster")
+        self._seed_channel_app("https://example.com/3", ApplicationStatus.SUBMITTED,
+                               source="hunter")
+        resp = client.get("/api/stats")
+        channels = {c["key"]: c for c in resp.json()["channels"]}
+        assert channels["poster"] == {"key": "poster", "sent": 1, "replies": 1,
+                                      "rate": 100, "na": False}
+        assert channels["recruiter_email"]["sent"] == 1
+        assert channels["recruiter_email"]["rate"] == 0
+        assert channels["portal"]["sent"] == 1
+        assert channels["portal"]["na"] is True
+        assert channels["portal"]["rate"] is None
+
+    def test_channel_stats_excludes_pre_submission(self, client: TestClient):
+        self._seed_channel_app("https://example.com/1", ApplicationStatus.DRAFT)
+        self._seed_channel_app("https://example.com/2",
+                               ApplicationStatus.PENDING_VALIDATION, source="hunter")
+        resp = client.get("/api/stats")
+        assert all(c["sent"] == 0 for c in resp.json()["channels"])
+
+    def test_dashboard_renders_channel_section(self, client: TestClient):
+        self._seed_channel_app("https://example.com/1", ApplicationStatus.REPLIED,
+                               source="linkedin_poster")
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'id="channel-stats"' in resp.text
+        assert 'data-testid="channel-row-poster"' in resp.text
+
+    def test_dashboard_hides_channel_section_without_data(self, client: TestClient):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'id="channel-stats"' not in resp.text
+
     def test_total_matched_counts_matched_pending_applied(self, client: TestClient):
         with get_session() as session:
             session.add(_make_job(url="https://example.com/1", status=JobStatus.MATCHED))

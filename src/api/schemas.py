@@ -88,9 +88,18 @@ class StatsTotal(BaseModel):
     replied: int
 
 
+class ChannelStats(BaseModel):
+    key: str          # poster | recruiter_email | portal
+    sent: int
+    replies: int
+    rate: int | None  # percentage, None when not observable
+    na: bool          # True when replies can't be tracked (portal)
+
+
 class StatsOut(BaseModel):
     today: StatsToday
     total: StatsTotal
+    channels: list[ChannelStats]
     pipeline_status: dict[str, dict]
 
 

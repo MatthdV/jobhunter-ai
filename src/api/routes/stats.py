@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 
 from src.api.background import tracker
 from src.api.deps import get_current_user
-from src.api.schemas import StatsOut, StatsToday, StatsTotal
+from src.api.schemas import ChannelStats, StatsOut, StatsToday, StatsTotal
 from src.storage.database import get_session
 from src.storage.models import Application, ApplicationStatus, Job, JobStatus, User
 
@@ -94,6 +94,10 @@ def get_stats(current_user: User = Depends(get_current_user)) -> StatsOut:
             .count()
         )
 
+        from src.api.routes.pages import channel_stats
+
+        channels = channel_stats(session, uid)
+
     return StatsOut(
         today=StatsToday(
             scanned=today_scanned,
@@ -107,5 +111,6 @@ def get_stats(current_user: User = Depends(get_current_user)) -> StatsOut:
             applied=total_applied,
             replied=total_replied,
         ),
+        channels=[ChannelStats(**c) for c in channels],
         pipeline_status=tracker.all(user_id=uid),
     )

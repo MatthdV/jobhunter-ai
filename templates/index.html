@@ -34,6 +34,48 @@
     {% endfor %}
   </div>
 
+  <!-- ===== Section 1bis : Taux de réponse par canal ===== -->
+  {% if stats.channels is defined and stats.channels %}
+  {% set _has_channel_data = stats.channels | selectattr("sent") | list | length > 0 %}
+  {% if _has_channel_data %}
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6" id="channel-stats">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+      {{ t.channels_title if t else "Taux de réponse par canal" }}
+    </h2>
+    {% set _channel_labels = {
+      "poster": (t.channel_poster if t else "Recruteur de l'offre contacté", "bg-blue-500"),
+      "recruiter_email": (t.channel_recruiter_email if t else "Email direct recruteur", "bg-emerald-500"),
+      "portal": (t.channel_portal if t else "Apply portail", "bg-gray-400"),
+    } %}
+    <div class="space-y-3">
+      {% for ch in stats.channels %}
+      {% set label, bar_color = _channel_labels[ch.key] %}
+      <div class="flex items-center gap-4" data-testid="channel-row-{{ ch.key }}">
+        <span class="w-56 shrink-0 text-sm text-gray-600">{{ label }}</span>
+        <div class="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          {% if not ch.na and ch.rate is not none %}
+          <div class="h-full {{ bar_color }} rounded-full" style="width: {{ ch.rate }}%"></div>
+          {% endif %}
+        </div>
+        <span class="w-40 shrink-0 text-right text-sm">
+          {% if ch.na %}
+          <span class="text-gray-400" title="{{ t.channel_na_note if t else 'Réponses non traçables pour les candidatures portail' }}">
+            {{ ch.sent }} {{ t.channel_sent if t else "envoyées" }} — N/A
+          </span>
+          {% elif ch.sent > 0 %}
+          <span class="font-semibold text-gray-800">{{ ch.rate }}%</span>
+          <span class="text-gray-400">({{ ch.replies }}/{{ ch.sent }})</span>
+          {% else %}
+          <span class="text-gray-300">—</span>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
   <!-- ===== Onboarding checklist (disparaît quand les 3 étapes sont faites) ===== -->
   {% if onboarding is defined and not (onboarding.profile and onboarding.api_key and onboarding.search_terms) %}
   <div class="rounded-xl border border-amber-200 bg-amber-50 p-5">
