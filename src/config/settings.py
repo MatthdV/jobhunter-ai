@@ -104,6 +104,10 @@ class Settings(BaseSettings):
         description="Max simultaneous Playwright browsers across all users (anti-OOM gate)",
     )
     registration_open: bool = Field(True, description="Set to false (REGISTRATION_OPEN=false) to disable public registration after beta accounts are created")
+    cookie_secure: bool = Field(
+        True,
+        description="Secure flag on the auth cookie — set COOKIE_SECURE=false when serving plain HTTP (e.g. VPS without TLS proxy)",
+    )
     dry_run: bool = Field(True, description="If true, never actually submit applications")
     max_applications_per_day: int = Field(10, ge=1, le=50, description="Daily application cap")
     min_match_score: int = Field(80, ge=0, le=100, description="Minimum AI match score to consider")

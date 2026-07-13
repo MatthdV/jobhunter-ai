@@ -75,7 +75,7 @@ def _set_auth_cookie(response: RedirectResponse, token: str) -> None:
         max_age=_COOKIE_MAX_AGE,
         httponly=True,
         samesite="lax",
-        secure=True,  # Railway terminates TLS at edge — always True
+        secure=settings.cookie_secure,  # COOKIE_SECURE=false for plain-HTTP deploys
     )
 
 
