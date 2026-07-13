@@ -22,6 +22,11 @@ class RecruiterOut(BaseModel):
     id: int
     name: str | None = None
     email: str | None = None
+    title: str | None = None
+    linkedin_url: str | None = None
+    source: str | None = None
+    confidence: float | None = None
+    found_at: datetime | None = None
 
 
 class ApplicationOut(BaseModel):

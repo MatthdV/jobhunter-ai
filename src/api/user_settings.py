@@ -29,6 +29,8 @@ _CREDENTIAL_FIELDS = (
     "linkedin_password",
     "wttj_email",
     "wttj_password",
+    "hunter_api_key",
+    "brave_api_key",
 )
 
 
@@ -63,6 +65,8 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
         "linkedin_password": "",
         "wttj_email": "",
         "wttj_password": "",
+        "hunter_api_key": "",
+        "brave_api_key": "",
         # Railway-only keys — never overridden per-user
         "indeed_api_key": settings.indeed_api_key,
         "adzuna_app_id": settings.adzuna_app_id,

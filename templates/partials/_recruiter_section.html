@@ -1,0 +1,160 @@
+{# Recruiter contact section — 4 states: not searched / searching / found / not_found|error.
+   Swapped via HTMX (hx-target="#recruiter-section", hx-swap="outerHTML").
+   Context: job_id, has_company, search_status, searched_at, recruiter (dict|None),
+            recruiter_keys_configured, t #}
+<div id="recruiter-section"
+     class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4"
+     {% if search_status == "searching" %}
+     hx-get="/jobs/{{ job_id }}/recruiter-section"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+  <div class="flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+      {{ t.recruiter_section_title if t else "Contact recruteur" }}
+    </h2>
+    {% if recruiter and recruiter.source %}
+    <span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full
+                 {% if (recruiter.confidence or 0) >= 0.75 %}bg-emerald-50 text-emerald-700
+                 {% elif (recruiter.confidence or 0) >= 0.5 %}bg-amber-50 text-amber-700
+                 {% else %}bg-gray-100 text-gray-500{% endif %}">
+      {{ "Hunter" if recruiter.source == "hunter" else "LinkedIn/Brave" }}
+      {% if recruiter.confidence is not none %}— {{ (recruiter.confidence * 100) | round | int }}%{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if not has_company %}
+  <p class="text-sm text-gray-400">
+    {{ t.recruiter_no_company if t else "Aucune entreprise associée à cette offre." }}
+  </p>
+
+  {% elif search_status == "searching" %}
+  <div class="flex items-center gap-3 text-sm text-gray-500">
+    <svg class="w-4 h-4 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+    </svg>
+    {{ t.recruiter_searching if t else "Recherche du recruteur en cours…" }}
+  </div>
+
+  {% elif recruiter %}
+  <div class="space-y-3">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span class="text-sm font-semibold text-gray-800">{{ recruiter.name }}</span>
+      {% if recruiter.title %}
+      <span class="text-sm text-gray-500">{{ recruiter.title }}</span>
+      {% endif %}
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      {% if recruiter.linkedin_url %}
+      <a href="{{ recruiter.linkedin_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0A66C2] text-white text-xs font-semibold hover:opacity-90 transition-opacity">
+        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M19 0h-14c-2.76 0-5 2.24-5 5v14c0 2.76 2.24 5 5 5h14c2.76 0 5-2.24 5-5v-14c0-2.76-2.24-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.27c-.97 0-1.75-.79-1.75-1.76s.78-1.76 1.75-1.76 1.75.79 1.75 1.76-.78 1.76-1.75 1.76zm13.5 12.27h-3v-5.6c0-3.37-4-3.11-4 0v5.6h-3v-11h3v1.77c1.4-2.59 7-2.78 7 2.47v6.76z"/>
+        </svg>
+        {{ t.recruiter_view_linkedin if t else "Profil LinkedIn" }}
+      </a>
+      {% endif %}
+      {% if recruiter.email %}
+      <a href="mailto:{{ recruiter.email }}"
+         class="text-sm font-mono text-indigo-600 hover:underline">{{ recruiter.email }}</a>
+      {% else %}
+      <span class="text-xs text-gray-400">{{ t.recruiter_no_email if t else "Email non trouvé — contact via LinkedIn" }}</span>
+      {% endif %}
+    </div>
+
+    {% if recruiter.email %}
+    <div class="pt-2 border-t border-gray-100 space-y-3">
+      {% if recruiter.draft_subject or recruiter.draft_body %}
+      <form hx-post="/jobs/{{ job_id }}/send-recruiter-email"
+            hx-target="#recruiter-section" hx-swap="outerHTML"
+            hx-confirm="{{ t.recruiter_send_confirm if t else 'Envoyer cet email au recruteur ?' }}"
+            class="space-y-2">
+        <input type="text" name="subject" value="{{ recruiter.draft_subject or '' }}"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                      focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+        <textarea name="body" rows="8"
+                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed
+                         focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">{{ recruiter.draft_body or '' }}</textarea>
+        <div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <p class="text-xs text-amber-800">⚠ Brouillon généré par IA — relis chaque ligne avant d'envoyer.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="submit"
+                  class="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+            {{ t.recruiter_send_email if t else "Envoyer l'email" }}
+          </button>
+          <button type="button"
+                  hx-post="/jobs/{{ job_id }}/draft-email"
+                  hx-target="#recruiter-section" hx-swap="outerHTML"
+                  class="px-3 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            {{ t.recruiter_redraft if t else "Régénérer" }}
+          </button>
+        </div>
+      </form>
+      {% else %}
+      <button hx-post="/jobs/{{ job_id }}/draft-email"
+              hx-target="#recruiter-section" hx-swap="outerHTML"
+              hx-indicator="#draft-spinner"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+        <svg id="draft-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+        </svg>
+        {{ t.recruiter_draft_email if t else "Générer un draft d'email" }}
+      </button>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="pt-1">
+      <button hx-post="/jobs/{{ job_id }}/find-recruiter"
+              hx-target="#recruiter-section" hx-swap="outerHTML"
+              class="text-xs text-gray-400 hover:text-gray-600 underline">
+        {{ t.recruiter_research_again if t else "Relancer la recherche" }}
+      </button>
+    </div>
+  </div>
+
+  {% elif search_status in ("not_found", "error") %}
+  <div class="space-y-2">
+    <p class="text-sm text-gray-500">
+      {% if search_status == "error" %}
+      {{ t.recruiter_search_error if t else "La recherche a échoué." }}
+      {% else %}
+      {{ t.recruiter_not_found if t else "Aucun recruteur trouvé pour cette entreprise." }}
+      {% endif %}
+      {% if searched_at %}<span class="text-xs text-gray-400">({{ searched_at }})</span>{% endif %}
+    </p>
+    <button hx-post="/jobs/{{ job_id }}/find-recruiter"
+            hx-target="#recruiter-section" hx-swap="outerHTML"
+            class="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+      {{ t.recruiter_retry if t else "Réessayer" }}
+    </button>
+  </div>
+
+  {% else %}
+  <div class="space-y-2">
+    <p class="text-sm text-gray-500">
+      {{ t.recruiter_pitch if t else "Trouve le contact du recruteur pour envoyer ta candidature en direct — au lieu de disparaître dans la pile du portail." }}
+    </p>
+    {% if recruiter_keys_configured %}
+    <button hx-post="/jobs/{{ job_id }}/find-recruiter"
+            hx-target="#recruiter-section" hx-swap="outerHTML"
+            class="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+      {{ t.recruiter_find_btn if t else "Trouver le recruteur" }}
+    </button>
+    {% else %}
+    <button disabled
+            class="px-4 py-2 bg-gray-200 text-gray-400 text-sm font-semibold rounded-lg cursor-not-allowed">
+      {{ t.recruiter_find_btn if t else "Trouver le recruteur" }}
+    </button>
+    <p class="text-xs text-gray-400">
+      {{ t.recruiter_keys_hint if t else "Configure une clé Hunter.io ou Brave Search dans" }}
+      <a href="/settings" class="text-indigo-600 hover:underline">{{ t.nav_settings if t else "Paramètres" }}</a>.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

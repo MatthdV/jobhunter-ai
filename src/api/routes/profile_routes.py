@@ -473,6 +473,24 @@ class LangIn(BaseModel):
     language: str
 
 
+class RecruiterAutoFindIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/profile/recruiter-auto-find")
+def set_recruiter_auto_find(
+    body: RecruiterAutoFindIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Toggle automatic recruiter search after the match phase."""
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.recruiter_auto_find = body.enabled  # type: ignore[assignment]
+    return {"ok": True, "enabled": body.enabled}
+
+
 @router.put("/profile/language")
 def set_language(
     body: LangIn,

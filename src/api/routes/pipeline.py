@@ -236,6 +236,61 @@ async def _run_scan(user_id: int) -> None:
         tracker.error("scan", str(exc), user_id=user_id)
 
 
+_AUTO_FIND_CAP = 5  # companies per match run — protects Hunter/Brave free tiers
+_AUTO_FIND_RETRY_DAYS = 30
+
+
+async def _auto_find_recruiters(user_id: int) -> None:
+    """Best-effort recruiter search for freshly matched jobs.
+
+    Picks at most _AUTO_FIND_CAP distinct companies whose recruiter was never
+    searched (or not found > _AUTO_FIND_RETRY_DAYS ago) and runs the finder
+    sequentially (Brave free tier = 1 req/s). Never raises.
+    """
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    from src.analysis.recruiter_finder import find_and_persist_recruiter
+    from src.storage.models import Company
+
+    try:
+        retry_before = datetime.now(timezone.utc) - timedelta(days=_AUTO_FIND_RETRY_DAYS)
+        with get_session() as session:
+            rows = (
+                session.query(Job.id, Job.company_id, Company.recruiter_search_status,
+                              Company.recruiter_searched_at)
+                .join(Company, Job.company_id == Company.id)
+                .filter(Job.user_id == user_id, Job.status == JobStatus.MATCHED)
+                .order_by(Job.match_score.desc())
+                .all()
+            )
+        targets: list[int] = []  # job ids, one per company
+        seen_companies: set[int] = set()
+        for job_id, company_id, status, searched_at in rows:
+            if company_id in seen_companies:
+                continue
+            never_searched = status is None
+            stale_not_found = (
+                status == "not_found"
+                and (searched_at is None or searched_at < retry_before.replace(tzinfo=None))
+            )
+            if never_searched or stale_not_found:
+                seen_companies.add(company_id)
+                targets.append(job_id)
+            if len(targets) >= _AUTO_FIND_CAP:
+                break
+
+        for i, job_id in enumerate(targets):
+            if i:
+                await asyncio.sleep(1.1)
+            await find_and_persist_recruiter(job_id, user_id)
+        if targets:
+            logger.info("Auto recruiter search: %d companies for user %d",
+                        len(targets), user_id)
+    except Exception:
+        logger.exception("Auto recruiter search failed for user %d", user_id)
+
+
 async def _run_match(user_id: int) -> None:
     """Match phase: score all NEW jobs for *user_id* with AI."""
     try:
@@ -298,6 +353,11 @@ async def _run_match(user_id: int) -> None:
                 .filter(Job.status == JobStatus.MATCHED, Job.user_id == user_id)
                 .count()
             )
+
+        if user.recruiter_auto_find and (
+            user_cfg.get("hunter_api_key") or user_cfg.get("brave_api_key")
+        ):
+            await _auto_find_recruiters(user_id)
 
         tracker.done("match", user_id=user_id, result={"matched": matched_count})
     except Exception as exc:

@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -17,8 +17,17 @@ from src.api.deps import require_user_redirect
 from src.api.i18n import get_t, get_ui_lang
 from src.config.settings import settings
 from src.storage.database import get_session
-from src.storage.models import Application, ApplicationStatus, Job, JobStatus, MatchResult, User
-from datetime import date, datetime
+from src.storage.models import (
+    Application,
+    ApplicationStatus,
+    Company,
+    Job,
+    JobStatus,
+    MatchResult,
+    Recruiter,
+    User,
+)
+from datetime import date, datetime, timezone
 from datetime import time as _time
 
 logger = logging.getLogger(__name__)
@@ -195,6 +204,7 @@ def _serialize_job(job: Job) -> dict:
         "title": job.title,
         "url": job.url,
         "source": job.source,
+        "company_id": job.company_id,
         "status": str(job.status),
         "match_score": job.match_score,
         "match_reasoning": job.match_reasoning,
@@ -330,6 +340,271 @@ def job_set_status(
     )
 
 
+def _serialize_recruiter(rec: Recruiter | None) -> dict | None:
+    """Serialize a Recruiter ORM row for the recruiter section templates."""
+    if rec is None:
+        return None
+    return {
+        "id": rec.id,
+        "name": rec.name,
+        "title": rec.title,
+        "email": rec.email,
+        "linkedin_url": rec.linkedin_url,
+        "source": rec.source,
+        "confidence": rec.confidence,
+        "found_at": rec.found_at.isoformat() if rec.found_at else None,
+        "draft_subject": rec.draft_subject,
+        "draft_body": rec.draft_body,
+    }
+
+
+def _recruiter_keys_configured(user: User) -> bool:
+    """True when the user has at least one recruiter-search key (Hunter or Brave)."""
+    from src.api.user_settings import get_settings_for_user
+
+    cfg = get_settings_for_user(user)
+    return bool(cfg.get("hunter_api_key") or cfg.get("brave_api_key"))
+
+
+def _recruiter_section_context(session, job: Job, user: User) -> dict:
+    """Build template context for partials/_recruiter_section.html.
+
+    Must be called with *job* attached to an open session.
+    """
+    company = job.company
+    recruiter = None
+    search_status = None
+    searched_at = None
+    if company is not None:
+        search_status = company.recruiter_search_status
+        searched_at = (
+            company.recruiter_searched_at.isoformat()[:10]
+            if company.recruiter_searched_at
+            else None
+        )
+        if company.recruiters:
+            recruiter = max(company.recruiters, key=lambda r: r.confidence or 0.0)
+    return {
+        "job_id": job.id,
+        "has_company": company is not None,
+        "search_status": search_status,
+        "searched_at": searched_at,
+        "recruiter": _serialize_recruiter(recruiter),
+        "recruiter_keys_configured": _recruiter_keys_configured(user),
+    }
+
+
+@router.get("/jobs/{job_id}/recruiter-section", response_class=HTMLResponse)
+def recruiter_section(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Recruiter section partial — polled by HTMX while a search runs."""
+    with get_session() as session:
+        job = (
+            session.query(Job)
+            .filter(Job.id == job_id, Job.user_id == current_user.id)
+            .one_or_none()
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        ctx = _recruiter_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
+@router.post("/jobs/{job_id}/find-recruiter", response_class=HTMLResponse)
+def find_recruiter(
+    request: Request,
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Kick off a background recruiter search and return the 'searching' partial.
+
+    Idempotent: if a search is already running for this company, no second
+    task is scheduled — the searching partial is returned as-is.
+    """
+    from src.analysis.recruiter_finder import find_and_persist_recruiter
+
+    with get_session() as session:
+        job = (
+            session.query(Job)
+            .filter(Job.id == job_id, Job.user_id == current_user.id)
+            .one_or_none()
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        if job.company_id is None:
+            raise HTTPException(status_code=422, detail="Job has no company")
+        if not _recruiter_keys_configured(current_user):
+            raise HTTPException(
+                status_code=422,
+                detail="Configure a Hunter.io or Brave Search API key in Settings first",
+            )
+        company = session.get(Company, job.company_id)
+        already_searching = company.recruiter_search_status == "searching"
+        if not already_searching:
+            # Set synchronously so the polling partial shows the right state
+            # even before the background task starts.
+            company.recruiter_search_status = "searching"
+            company.recruiter_search_error = None
+        ctx = _recruiter_section_context(session, job, current_user)
+        ctx["search_status"] = "searching"
+
+    if not already_searching:
+        background_tasks.add_task(find_and_persist_recruiter, job_id, current_user.id)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
+def _load_job_with_recruiter(session, job_id: int, user_id: int) -> tuple[Job, Recruiter]:
+    """Load an owned job + its best recruiter or raise 404/422."""
+    job = (
+        session.query(Job)
+        .filter(Job.id == job_id, Job.user_id == user_id)
+        .one_or_none()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    if job.company is None or not job.company.recruiters:
+        raise HTTPException(status_code=422, detail="No recruiter found for this job yet")
+    recruiter = max(job.company.recruiters, key=lambda r: r.confidence or 0.0)
+    return job, recruiter
+
+
+@router.post("/jobs/{job_id}/draft-email", response_class=HTMLResponse)
+async def draft_recruiter_email(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Generate (or regenerate) a personalized outreach email draft via LLM."""
+    from src.analysis.recruiter_finder import _build_llm_client
+    from src.api.user_settings import get_settings_for_user
+    from src.communications.outreach_writer import draft_outreach
+    from src.config.profile import get_profile_for_user
+
+    with get_session() as session:
+        job, recruiter = _load_job_with_recruiter(session, job_id, current_user.id)
+        job_title, job_description = job.title, job.description
+        company_name = job.company.name
+        recruiter_id = recruiter.id
+        recruiter_name, recruiter_title = recruiter.name, recruiter.title
+
+    user_cfg = get_settings_for_user(current_user)
+    client = _build_llm_client(user_cfg)
+    if client is None:
+        raise HTTPException(
+            status_code=422,
+            detail="LLM provider not configured — set your API key in Settings",
+        )
+    profile = get_profile_for_user(current_user)
+
+    try:
+        subject, body = await draft_outreach(
+            job_title, job_description, company_name,
+            recruiter_name, recruiter_title, profile, client,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    with get_session() as session:
+        rec = session.get(Recruiter, recruiter_id)
+        if rec is not None:
+            rec.draft_subject = subject
+            rec.draft_body = body
+        job = session.get(Job, job_id)
+        ctx = _recruiter_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
+@router.post("/jobs/{job_id}/send-recruiter-email", response_class=HTMLResponse)
+async def send_recruiter_email(
+    request: Request,
+    job_id: int,
+    subject: str = Form(...),
+    body: str = Form(...),
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Send the (user-edited) outreach email and link it to the Application.
+
+    Respects user.dry_run: in dry-run mode nothing is sent, the draft is
+    persisted and a clear message is raised instead.
+    """
+    from src.api.user_settings import get_settings_for_user
+
+    subject = subject.strip()
+    body = body.strip()
+    if not subject or not body:
+        raise HTTPException(status_code=422, detail="Subject and body are required")
+
+    with get_session() as session:
+        job, recruiter = _load_job_with_recruiter(session, job_id, current_user.id)
+        if not recruiter.email:
+            raise HTTPException(
+                status_code=422,
+                detail="Recruiter has no email — contact them via LinkedIn instead",
+            )
+        # Persist edits so nothing is lost regardless of the outcome
+        recruiter.draft_subject = subject
+        recruiter.draft_body = body
+        recruiter_id, recruiter_email = recruiter.id, recruiter.email
+        cv_path = job.application.cv_path if job.application else None
+
+    user_cfg = get_settings_for_user(current_user)
+    if not (
+        user_cfg.get("gmail_client_id")
+        and user_cfg.get("gmail_client_secret")
+        and user_cfg.get("gmail_refresh_token")
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Gmail not configured — set Gmail credentials in Settings",
+        )
+    if current_user.dry_run:
+        raise HTTPException(
+            status_code=422,
+            detail="Dry-run mode is on — draft saved, nothing sent. "
+                   "Disable dry-run in Settings to send for real.",
+        )
+
+    from src.communications.email_handler import EmailHandler
+
+    email_handler = EmailHandler()
+    try:
+        gmail_thread_id = await email_handler.send(
+            to=recruiter_email,
+            subject=subject,
+            body=body,
+            attachments=[cv_path] if cv_path else None,
+        )
+    except Exception as exc:
+        logger.exception("Recruiter email send failed for job %d", job_id)
+        raise HTTPException(status_code=502, detail=f"Email send failed: {exc}")
+
+    with get_session() as session:
+        job = session.get(Job, job_id)
+        app = job.application
+        if app is None:
+            app = Application(job_id=job_id, user_id=current_user.id)
+            session.add(app)
+        app.recruiter_id = recruiter_id
+        app.gmail_thread_id = gmail_thread_id
+        app.status = ApplicationStatus.SUBMITTED
+        app.submitted_at = datetime.now(timezone.utc)
+        job.status = JobStatus.APPLIED
+        ctx = _recruiter_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_detail(
     request: Request,
@@ -356,6 +631,7 @@ def job_detail(
         if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         job_dict = _serialize_job(job)
+        recruiter_ctx = _recruiter_section_context(session, job, current_user)
 
         # Load A-F evaluation blocks from MatchResult
         evaluation_blocks: list[dict] = []
@@ -388,6 +664,7 @@ def job_detail(
             "current_user": current_user,
             "t": t,
             "current_lang": get_ui_lang(current_user),
+            **recruiter_ctx,
         },
     )
 

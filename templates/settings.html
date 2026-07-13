@@ -401,11 +401,15 @@
       {% set _cred_wttj_email_hint = t.get('cred_wttj_email_hint', 'Email de votre compte Welcome to the Jungle (requis pour le scraping).') if t else 'Email de votre compte Welcome to the Jungle (requis pour le scraping).' %}
       {% set _cred_wttj_password_label = t.get('cred_wttj_password_label', 'WTTJ Mot de passe') if t else 'WTTJ Mot de passe' %}
       {% set _cred_wttj_password_hint = t.get('cred_wttj_password_hint', 'Mot de passe Welcome to the Jungle.') if t else 'Mot de passe Welcome to the Jungle.' %}
+      {% set _cred_hunter_hint = t.get('cred_hunter_hint', 'Optionnel — trouve nom + email vérifié du recruteur (hunter.io, free tier).') if t else 'Optionnel — trouve nom + email vérifié du recruteur (hunter.io, free tier).' %}
+      {% set _cred_brave_hint = t.get('cred_brave_hint', 'Optionnel — recherche du profil LinkedIn du recruteur (brave.com/search/api, free tier).') if t else 'Optionnel — recherche du profil LinkedIn du recruteur (brave.com/search/api, free tier).' %}
       {% for field_name, field_label, field_hint in [
           ('openrouter_api_key', 'OpenRouter API Key', _cred_openrouter_hint),
           ('anthropic_api_key',  'Anthropic API Key',  _cred_anthropic_hint),
           ('wttj_email',         'WTTJ Email',         _cred_wttj_email_hint),
           ('wttj_password',      _cred_wttj_password_label, _cred_wttj_password_hint),
+          ('hunter_api_key',     'Hunter.io API Key',  _cred_hunter_hint),
+          ('brave_api_key',      'Brave Search API Key', _cred_brave_hint),
       ] %}
       <div>
         <div class="flex items-center gap-2 mb-1">
@@ -436,6 +440,25 @@
           {{ t.btn_save_keys if t else "Sauvegarder les clés" }}
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== Recherche recruteur ===== -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">{{ t.recruiter_settings_title if t else "Contact recruteur" }}</h2>
+      <p class="text-xs text-gray-400 mt-0.5">{{ t.recruiter_settings_subtitle if t else "Recherche du recruteur de l'entreprise pour contact direct (nécessite une clé Hunter.io ou Brave)." }}</p>
+    </div>
+    <div class="px-6 py-5">
+      <label class="flex items-center gap-3 cursor-pointer select-none">
+        <input type="checkbox" id="recruiter-auto-find"
+               {% if current_user.recruiter_auto_find %}checked{% endif %}
+               onchange="saveRecruiterAutoFind(this.checked)"
+               class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+        <span class="text-sm text-gray-700">
+          {{ t.recruiter_auto_find_label if t else "Chercher automatiquement le recruteur après chaque phase Match (5 entreprises max par run)" }}
+        </span>
+      </label>
     </div>
   </div>
 
@@ -602,10 +625,34 @@
   }
 
   // ────────────────────────────────────────────────────────
+  // Recruiter auto-find toggle
+  // ────────────────────────────────────────────────────────
+  async function saveRecruiterAutoFind(enabled) {
+    try {
+      const res = await fetch('/api/profile/recruiter-auto-find', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (res.ok) {
+        showToast(enabled ? 'Recherche auto du recruteur activée' : 'Recherche auto désactivée', 'success');
+      } else {
+        showToast('Erreur lors de la sauvegarde', 'error');
+        const el = document.getElementById('recruiter-auto-find');
+        if (el) el.checked = !enabled;
+      }
+    } catch (_) {
+      showToast('Erreur réseau', 'error');
+      const el = document.getElementById('recruiter-auto-find');
+      if (el) el.checked = !enabled;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────
   // Credentials save
   // ────────────────────────────────────────────────────────
   async function saveCredentials() {
-    const fields = ['openrouter_api_key', 'anthropic_api_key', 'wttj_email', 'wttj_password'];
+    const fields = ['openrouter_api_key', 'anthropic_api_key', 'wttj_email', 'wttj_password', 'hunter_api_key', 'brave_api_key'];
     const credentials = {};
     fields.forEach(f => {
       const el = document.getElementById('cred-' + f);

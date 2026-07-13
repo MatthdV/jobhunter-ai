@@ -103,6 +103,18 @@ def _migrate_schema(engine: Engine) -> None:
         ("companies", "red_flags TEXT"),
         ("companies", "researched_at DATETIME"),
         ("recruiters", "user_id INTEGER REFERENCES users(id)"),
+        # Recruiter contact finder (find-recruiter feature)
+        ("recruiters", "title VARCHAR(255)"),
+        ("recruiters", "linkedin_url VARCHAR(500)"),
+        ("recruiters", "source VARCHAR(50)"),
+        ("recruiters", "confidence FLOAT"),
+        ("recruiters", "found_at DATETIME"),
+        ("recruiters", "draft_subject TEXT"),
+        ("recruiters", "draft_body TEXT"),
+        ("companies", "recruiter_search_status VARCHAR(20)"),
+        ("companies", "recruiter_searched_at DATETIME"),
+        ("companies", "recruiter_search_error TEXT"),
+        ("users", "recruiter_auto_find BOOLEAN DEFAULT 0"),
     ]
     with engine.connect() as conn:
         for table, col_def in new_columns:

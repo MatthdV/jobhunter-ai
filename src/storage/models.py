@@ -68,6 +68,7 @@ class User(Base):
     active_sources = Column(String(200), default="wttj")   # comma-separated
     dry_run = Column(Boolean, default=True)
     max_days_old = Column(Integer, default=30)
+    recruiter_auto_find = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -98,6 +99,9 @@ class Company(Base):
     growth_signals = Column(Text, nullable=True)        # JSON array
     red_flags = Column(Text, nullable=True)             # JSON array
     researched_at = Column(DateTime, nullable=True)
+    recruiter_search_status = Column(String(20), nullable=True)  # None|searching|found|not_found|error
+    recruiter_searched_at = Column(DateTime, nullable=True)
+    recruiter_search_error = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
@@ -181,6 +185,13 @@ class Recruiter(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)
     notes = Column(Text)
+    title = Column(String(255), nullable=True)          # e.g. "Talent Acquisition Manager"
+    linkedin_url = Column(String(500), nullable=True)
+    source = Column(String(50), nullable=True)          # "hunter" | "brave_llm"
+    confidence = Column(Float, nullable=True)           # 0.0-1.0
+    found_at = Column(DateTime, nullable=True)
+    draft_subject = Column(Text, nullable=True)
+    draft_body = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = relationship("Company", back_populates="recruiters")

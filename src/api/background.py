@@ -202,6 +202,19 @@ def reconcile_orphaned_runs() -> int:
             row.status = TaskStatus.ERROR  # type: ignore[assignment]
             row.finished_at = datetime.now(UTC)  # type: ignore[assignment]
             row.error = "Interrompu par un redéploiement"  # type: ignore[assignment]
+
+        # Recruiter searches interrupted mid-flight get the same treatment.
+        from src.storage.models import Company
+
+        orphaned_searches = (
+            session.query(Company)
+            .filter(Company.recruiter_search_status == "searching")
+            .all()
+        )
+        for company in orphaned_searches:
+            company.recruiter_search_status = "error"  # type: ignore[assignment]
+            company.recruiter_search_error = "Interrompu par un redéploiement"  # type: ignore[assignment]
+
         return len(rows)
 
 
