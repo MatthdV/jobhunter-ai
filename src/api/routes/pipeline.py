@@ -152,6 +152,13 @@ async def _run_scan(user_id: int) -> None:
                     "Skipping source %r — missing name or search_terms",
                     source.get("name"),
                 )
+                # Count as a failed attempt: a scan where every source is
+                # skipped must end ERROR, not a green 'done, 0 jobs'.
+                sources_attempted += 1
+                source_errors.append(
+                    f"{source.get('name') or source_key or '?'}: "
+                    "aucun mot-clé configuré (ajoute des search_terms dans Paramètres)"
+                )
                 continue
 
             scraper = None
@@ -503,10 +510,10 @@ async def trigger_match(
         for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
                   "deepseek_api_key", "openrouter_api_key")
     ):
-        raise HTTPException(
-            status_code=400,
-            detail="AI provider API key not configured. Set it in credentials or .env.",
-        )
+        detail = "AI provider API key not configured. Set it in credentials or .env."
+        # Release the RUNNING slot taken by _atomic_start, or retries 409 forever.
+        tracker.error("match", detail, user_id=current_user.id)
+        raise HTTPException(status_code=400, detail=detail)
     background_tasks.add_task(_run_match, current_user.id)
     return PipelineStartResponse(
         status="started",
@@ -529,10 +536,9 @@ async def trigger_apply(
         for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
                   "deepseek_api_key", "openrouter_api_key")
     ):
-        raise HTTPException(
-            status_code=400,
-            detail="AI provider API key not configured. Set it in credentials or .env.",
-        )
+        detail = "AI provider API key not configured. Set it in credentials or .env."
+        tracker.error("apply", detail, user_id=current_user.id)
+        raise HTTPException(status_code=400, detail=detail)
     background_tasks.add_task(_run_apply, current_user.id, dry_run)
     return PipelineStartResponse(
         status="started",
@@ -554,10 +560,9 @@ async def trigger_respond(
         and user_cfg.get("gmail_client_secret")
         and user_cfg.get("gmail_refresh_token")
     ):
-        raise HTTPException(
-            status_code=400,
-            detail="Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token.",
-        )
+        detail = "Gmail not configured. Set gmail_client_id, gmail_client_secret, and gmail_refresh_token."
+        tracker.error("respond", detail, user_id=current_user.id)
+        raise HTTPException(status_code=400, detail=detail)
     background_tasks.add_task(_run_respond, current_user.id)
     return PipelineStartResponse(
         status="started",

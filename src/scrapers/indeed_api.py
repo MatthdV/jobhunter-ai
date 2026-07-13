@@ -49,13 +49,17 @@ class IndeedApiScraper(BaseScraper):
 
     def __init__(self, headless: bool = True, api_key: str = "", user_id: int | None = None) -> None:
         super().__init__(headless=headless, user_id=user_id)
-        resolved_key = api_key or settings.indeed_api_key
+        resolved_key = self._get_indeed_api_key(api_key)
         if not resolved_key:
             raise ConfigurationError(
-                "INDEED_API_KEY is not set — key is global (Railway ENV), not per-user"
+                "INDEED_API_KEY is not set — key is global (server ENV), not per-user"
             )
         self._api_key = resolved_key
         self._client: httpx.AsyncClient | None = None
+
+    def _get_indeed_api_key(self, api_key: str = "") -> str:
+        """Resolve the RapidAPI key — overridable in tests."""
+        return api_key or settings.indeed_api_key
 
     # ------------------------------------------------------------------
     # Lifecycle
