@@ -3,7 +3,20 @@
     {{ job.title }}
   </td>
   <td class="px-4 py-3 text-gray-600">
-    {{ job.company.name if job.company else "—" }}
+    <span class="inline-flex items-center gap-1.5">
+      {{ job.company.name if job.company else "—" }}
+      {% if job.company and job.company.recruiter_count %}
+      {% if job.company.best_recruiter_source == "linkedin_poster" %}
+      <span data-testid="contact-badge"
+            class="px-1.5 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 cursor-default"
+            title="{{ t.badge_contact_poster if t else 'Contact : recruteur de l&#39;offre (LinkedIn)' }}">👤</span>
+      {% else %}
+      <span data-testid="contact-badge"
+            class="px-1.5 py-0.5 rounded-full text-xs bg-green-50 text-green-700 cursor-default"
+            title="{{ t.badge_contact_email if t else 'Contact : email recruteur trouvé' }}">👤</span>
+      {% endif %}
+      {% endif %}
+    </span>
   </td>
   <td class="px-4 py-3">
     <span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 uppercase">
@@ -74,7 +87,7 @@
         hx-target="closest tr"
         hx-swap="outerHTML"
         class="text-xs text-gray-400 hover:text-green-600 transition-colors font-medium"
-        title="Approuver manuellement">
+        title="{{ t.job_approve if t else 'Approuver' }}">
         ✓
       </button>
       {% endif %}
@@ -85,7 +98,7 @@
         hx-target="closest tr"
         hx-swap="outerHTML"
         class="text-xs text-gray-400 hover:text-blue-600 transition-colors font-medium"
-        title="J'ai postulé">
+        title="{{ t.job_mark_applied if t else 'J&#39;ai postulé' }}">
         📤
       </button>
       {% elif job.status == "applied" %}

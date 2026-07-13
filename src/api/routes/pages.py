@@ -177,12 +177,16 @@ def _serialize_job(job: Job) -> dict:
     """Serialize a Job ORM row into a plain dict for templates."""
     company_dict = None
     if job.company:
+        recruiters = job.company.recruiters or []
+        best = max(recruiters, key=lambda r: r.confidence or 0.0) if recruiters else None
         company_dict = {
             "id": job.company.id,
             "name": job.company.name,
             "sector": job.company.sector,
             "website": job.company.website,
             "is_target": job.company.is_target,
+            "recruiter_count": len(recruiters),
+            "best_recruiter_source": best.source if best else None,
         }
 
     app_dict = None
@@ -225,6 +229,7 @@ def _serialize_job(job: Job) -> dict:
 def dashboard(
     request: Request,
     status: str | None = Query(None),
+    has_contact: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_user_redirect),
@@ -236,6 +241,7 @@ def dashboard(
     with get_session() as session:
         # Per-status counts for filter tab badges
         from sqlalchemy import func
+        from sqlalchemy.orm import joinedload, selectinload
         status_rows = (
             session.query(Job.status, func.count(Job.id))
             .filter(Job.user_id == uid)
@@ -245,12 +251,25 @@ def dashboard(
         status_counts: dict[str, int] = {str(s): c for s, c in status_rows}
         status_counts["all"] = sum(status_counts.values())
 
-        q = session.query(Job).filter(Job.user_id == uid)
+        q = (
+            session.query(Job)
+            .options(
+                joinedload(Job.company).selectinload(Company.recruiters),
+                joinedload(Job.application),
+            )
+            .filter(Job.user_id == uid)
+        )
         if status:
             try:
                 q = q.filter(Job.status == JobStatus(status))
             except ValueError:
                 pass  # ignore invalid status filter
+        if has_contact:
+            q = q.filter(
+                Job.company_id.in_(
+                    session.query(Recruiter.company_id).filter(Recruiter.user_id == uid)
+                )
+            )
 
         total = q.count()
         jobs_orm = (
@@ -273,6 +292,7 @@ def dashboard(
             "jobs_ns": jobs_ns,
             "jobs_total": total,
             "status_filter": status or "all",
+            "has_contact": has_contact,
             "offset": offset,
             "limit": limit,
             "pipeline_status": stats.pipeline_status,
@@ -289,6 +309,7 @@ def dashboard(
 def jobs_list_page(
     request: Request,
     status: str | None = Query(None),
+    has_contact: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_user_redirect),
@@ -297,6 +318,7 @@ def jobs_list_page(
     return dashboard(
         request=request,
         status=status,
+        has_contact=has_contact,
         limit=limit,
         offset=offset,
         current_user=current_user,

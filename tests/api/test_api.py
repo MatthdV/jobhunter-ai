@@ -791,6 +791,87 @@ class TestPageRoutes:
         resp = client.get(f"/jobs/{job_id}")
         assert resp.status_code == 200
 
+    def test_dashboard_shows_contact_badge(self, client: TestClient):
+        with get_session() as session:
+            company = _make_company("BadgeCo")
+            session.add(company)
+            session.flush()
+            session.add(
+                Recruiter(
+                    name="Jane Doe",
+                    email="jane@badgeco.com",
+                    source="hunter",
+                    confidence=0.9,
+                    company_id=company.id,
+                    user_id=_TEST_USER_ID,
+                )
+            )
+            session.add(_make_job(url="https://example.com/badge", company=company))
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'data-testid="contact-badge"' in resp.text
+
+    def test_dashboard_no_badge_without_recruiter(self, client: TestClient):
+        with get_session() as session:
+            company = _make_company("NoContactCo")
+            session.add(company)
+            session.add(_make_job(url="https://example.com/nobadge", company=company))
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'data-testid="contact-badge"' not in resp.text
+
+    def test_dashboard_has_contact_filter(self, client: TestClient):
+        with get_session() as session:
+            with_contact = _make_company("WithContact")
+            without_contact = _make_company("WithoutContact")
+            session.add_all([with_contact, without_contact])
+            session.flush()
+            session.add(
+                Recruiter(
+                    name="John Poster",
+                    email="john@withcontact.com",
+                    source="linkedin_poster",
+                    confidence=0.95,
+                    company_id=with_contact.id,
+                    user_id=_TEST_USER_ID,
+                )
+            )
+            session.add(
+                _make_job(title="Job With Contact", url="https://example.com/wc", company=with_contact)
+            )
+            session.add(
+                _make_job(title="Job Without Contact", url="https://example.com/woc", company=without_contact)
+            )
+        resp = client.get("/?has_contact=1")
+        assert resp.status_code == 200
+        assert "Job With Contact" in resp.text
+        assert "Job Without Contact" not in resp.text
+
+    def test_status_swap_partial_still_renders(self, client: TestClient):
+        """Guards the index.html→_job_row.html refactor: swap returns a row with badge."""
+        with get_session() as session:
+            company = _make_company("SwapCo")
+            session.add(company)
+            session.flush()
+            session.add(
+                Recruiter(
+                    name="Ada",
+                    email="ada@swapco.com",
+                    source="brave_llm",
+                    confidence=0.5,
+                    company_id=company.id,
+                    user_id=_TEST_USER_ID,
+                )
+            )
+            j = _make_job(url="https://example.com/swap", company=company)
+            session.add(j)
+            session.flush()
+            job_id = j.id
+        resp = client.post(f"/jobs/{job_id}/status", data={"status": "matched"})
+        assert resp.status_code == 200
+        assert "<tr" in resp.text
+        assert 'data-testid="contact-badge"' in resp.text
+
 
 # ---------------------------------------------------------------------------
 # Concurrent pipeline requests
