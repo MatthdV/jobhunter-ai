@@ -103,6 +103,8 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
     if user.max_apps_per_day is not None:
         merged["max_applications_per_day"] = user.max_apps_per_day
     merged["dry_run"] = user.dry_run  # always use user's dry_run preference
+    if user.followup_delay_days is not None:
+        merged["followup_delay_days"] = user.followup_delay_days
 
     return merged
 

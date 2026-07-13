@@ -1,6 +1,9 @@
-# JobHunter AI — daily scan + match at 08:00
+# JobHunter AI — daily scan + match + respond + followup at 08:00
 # Runs the web pipeline (per-user sources config + encrypted per-user LLM keys)
 # instead of the legacy single-user CLI, which creates jobs with user_id=NULL
 # that never show up in the web UI. CRON_USER_ID defaults to 1 (first account).
+# respond runs BEFORE followup so replied applications are flipped to REPLIED
+# and never get a relance draft. Both phases no-op with a tracked error when
+# Gmail / the LLM key are not configured.
 # m h dom mon dow command
-0 8 * * * root cd /app && python -c "import asyncio, os; from src.api.routes.pipeline import _run_scan, _run_match; uid = int(os.environ.get('CRON_USER_ID', '1')); asyncio.run(_run_scan(uid)); asyncio.run(_run_match(uid))" >> /data/output/cron.log 2>&1
+0 8 * * * root cd /app && python -c "import asyncio, os; from src.api.routes.pipeline import _run_scan, _run_match, _run_respond, _run_followup; uid = int(os.environ.get('CRON_USER_ID', '1')); asyncio.run(_run_scan(uid)); asyncio.run(_run_match(uid)); asyncio.run(_run_respond(uid)); asyncio.run(_run_followup(uid))" >> /data/output/cron.log 2>&1

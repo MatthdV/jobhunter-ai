@@ -199,6 +199,15 @@ def _serialize_job(job: Job) -> dict:
             "cover_letter": app.cover_letter,
             "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
             "gmail_thread_id": app.gmail_thread_id,
+            "recruiter_id": app.recruiter_id,
+            "followup_draft_subject": app.followup_draft_subject,
+            "followup_draft_body": app.followup_draft_body,
+            "followup_generated_at": (
+                app.followup_generated_at.isoformat() if app.followup_generated_at else None
+            ),
+            "followup_sent_at": (
+                app.followup_sent_at.isoformat() if app.followup_sent_at else None
+            ),
             "notes": app.notes,
             "created_at": app.created_at.isoformat() if app.created_at else None,
         }
@@ -627,6 +636,190 @@ async def send_recruiter_email(
     return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
 
 
+def _followup_days_since(submitted_at_iso: str | None) -> int | None:
+    """Days elapsed since submission, from an ISO string (None-safe)."""
+    if not submitted_at_iso:
+        return None
+    sub = datetime.fromisoformat(submitted_at_iso)
+    if sub.tzinfo is None:
+        sub = sub.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - sub).days
+
+
+def _followup_section_context(session, job: Job, user: User) -> dict:
+    """Build template context for partials/_followup_section.html."""
+    job_dict = _serialize_job(job)
+    app = job_dict.get("application")
+    return {
+        "job_id": job.id,
+        "followup_app": app,
+        "followup_days": _followup_days_since(app["submitted_at"]) if app else None,
+        "followup_delay_days": user.followup_delay_days or 5,
+    }
+
+
+def _load_job_for_followup(session, job_id: int, user_id: int) -> Job:
+    """Load an owned job whose application is eligible for a follow-up, or raise."""
+    job = (
+        session.query(Job)
+        .filter(Job.id == job_id, Job.user_id == user_id)
+        .one_or_none()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    app = job.application
+    if app is None or not app.gmail_thread_id:
+        raise HTTPException(
+            status_code=422,
+            detail="No submitted application with an email thread for this job",
+        )
+    if app.status != ApplicationStatus.SUBMITTED:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Application is '{app.status}' — follow-ups only apply to submitted applications",
+        )
+    return job
+
+
+@router.post("/jobs/{job_id}/draft-followup", response_class=HTMLResponse)
+async def draft_followup_email(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Generate (or regenerate) a follow-up email draft via LLM."""
+    from src.analysis.recruiter_finder import _build_llm_client
+    from src.api.user_settings import get_settings_for_user
+    from src.communications.followup_writer import draft_followup
+    from src.config.profile import get_profile_for_user
+
+    with get_session() as session:
+        job = _load_job_for_followup(session, job_id, current_user.id)
+        app = job.application
+        job_title = job.title
+        company_name = job.company.name if job.company else "(unknown)"
+        original_subject = app.recruiter.draft_subject if app.recruiter else None
+        original_body = app.recruiter.draft_body if app.recruiter else None
+        days_since = _followup_days_since(
+            app.submitted_at.isoformat() if app.submitted_at else None
+        ) or 0
+        app_id = app.id
+
+    user_cfg = get_settings_for_user(current_user)
+    client = _build_llm_client(user_cfg)
+    if client is None:
+        raise HTTPException(
+            status_code=422,
+            detail="LLM provider not configured — set your API key in Settings",
+        )
+    profile = get_profile_for_user(current_user)
+
+    try:
+        subject, body = await draft_followup(
+            job_title, company_name, original_subject, original_body,
+            days_since, profile, client,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    with get_session() as session:
+        app = session.get(Application, app_id)
+        if app is not None:
+            app.followup_draft_subject = subject
+            app.followup_draft_body = body
+            app.followup_generated_at = datetime.now(timezone.utc)
+        job = session.get(Job, job_id)
+        ctx = _followup_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_followup_section.html", ctx)
+
+
+@router.post("/jobs/{job_id}/send-followup", response_class=HTMLResponse)
+async def send_followup_email(
+    request: Request,
+    job_id: int,
+    subject: str = Form(...),
+    body: str = Form(...),
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Send the (user-edited) follow-up in the existing Gmail thread.
+
+    Respects user.dry_run: in dry-run mode nothing is sent, the draft is
+    persisted and a clear message is raised instead.
+    """
+    from src.api.user_settings import get_settings_for_user
+
+    subject = subject.strip()
+    body = body.strip()
+    if not subject or not body:
+        raise HTTPException(status_code=422, detail="Subject and body are required")
+
+    with get_session() as session:
+        job = _load_job_for_followup(session, job_id, current_user.id)
+        app = job.application
+        if app.followup_sent_at is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="A follow-up was already sent for this application",
+            )
+        recruiter = app.recruiter
+        if recruiter is None or not recruiter.email:
+            raise HTTPException(
+                status_code=422,
+                detail="No recruiter email linked to this application",
+            )
+        # Persist edits so nothing is lost regardless of the outcome
+        app.followup_draft_subject = subject
+        app.followup_draft_body = body
+        if app.followup_generated_at is None:
+            app.followup_generated_at = datetime.now(timezone.utc)
+        app_id = app.id
+        recruiter_email = recruiter.email
+        thread_id = app.gmail_thread_id
+
+    user_cfg = get_settings_for_user(current_user)
+    if not (
+        user_cfg.get("gmail_client_id")
+        and user_cfg.get("gmail_client_secret")
+        and user_cfg.get("gmail_refresh_token")
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Gmail not configured — set Gmail credentials in Settings",
+        )
+    if current_user.dry_run:
+        raise HTTPException(
+            status_code=422,
+            detail="Dry-run mode is on — follow-up draft saved, nothing sent. "
+                   "Disable dry-run in Settings to send for real.",
+        )
+
+    from src.communications.email_handler import EmailHandler
+
+    email_handler = EmailHandler()
+    try:
+        await email_handler.send(
+            to=recruiter_email,
+            subject=subject,
+            body=body,
+            reply_to_thread=thread_id,
+        )
+    except Exception as exc:
+        logger.exception("Follow-up send failed for job %d", job_id)
+        raise HTTPException(status_code=502, detail=f"Email send failed: {exc}")
+
+    with get_session() as session:
+        app = session.get(Application, app_id)
+        if app is not None:
+            app.followup_sent_at = datetime.now(timezone.utc)
+        job = session.get(Job, job_id)
+        ctx = _followup_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_followup_section.html", ctx)
+
+
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_detail(
     request: Request,
@@ -654,6 +847,7 @@ def job_detail(
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         job_dict = _serialize_job(job)
         recruiter_ctx = _recruiter_section_context(session, job, current_user)
+        followup_ctx = _followup_section_context(session, job, current_user)
 
         # Load A-F evaluation blocks from MatchResult
         evaluation_blocks: list[dict] = []
@@ -687,6 +881,7 @@ def job_detail(
             "t": t,
             "current_lang": get_ui_lang(current_user),
             **recruiter_ctx,
+            **followup_ctx,
         },
     )
 
@@ -770,15 +965,18 @@ def settings_page(
 def update_search_settings(
     request: Request,
     max_days_old: int = Form(30),
+    followup_delay_days: int = Form(5),
     current_user: User = Depends(require_user_redirect),
 ) -> HTMLResponse:
-    """Save max_days_old preference."""
+    """Save max_days_old + followup_delay_days preferences."""
     value = max_days_old if max_days_old > 0 else None
+    followup_delay = min(max(followup_delay_days, 1), 30)
     with get_session() as session:
         user = session.get(User, current_user.id)
         if user is None:
             raise HTTPException(status_code=404)
         user.max_days_old = value  # type: ignore[assignment]
+        user.followup_delay_days = followup_delay  # type: ignore[assignment]
     import json as _json
     t = get_t(current_user)
     resp = templates.TemplateResponse(

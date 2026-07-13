@@ -69,6 +69,7 @@ class User(Base):
     dry_run = Column(Boolean, default=True)
     max_days_old = Column(Integer, default=30)
     recruiter_auto_find = Column(Boolean, default=False)
+    followup_delay_days = Column(Integer, default=5)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -162,6 +163,10 @@ class Application(Base):
     submitted_at = Column(DateTime, nullable=True)
     recruiter_id = Column(Integer, ForeignKey("recruiters.id"), nullable=True)
     gmail_thread_id = Column(String(200), nullable=True)  # For tracking replies
+    followup_draft_subject = Column(Text, nullable=True)
+    followup_draft_body = Column(Text, nullable=True)
+    followup_generated_at = Column(DateTime, nullable=True)
+    followup_sent_at = Column(DateTime, nullable=True)
     notes = Column(Text)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

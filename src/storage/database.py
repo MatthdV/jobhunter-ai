@@ -115,6 +115,12 @@ def _migrate_schema(engine: Engine) -> None:
         ("companies", "recruiter_searched_at DATETIME"),
         ("companies", "recruiter_search_error TEXT"),
         ("users", "recruiter_auto_find BOOLEAN DEFAULT 0"),
+        # Follow-up (relance) feature
+        ("applications", "followup_draft_subject TEXT"),
+        ("applications", "followup_draft_body TEXT"),
+        ("applications", "followup_generated_at DATETIME"),
+        ("applications", "followup_sent_at DATETIME"),
+        ("users", "followup_delay_days INTEGER DEFAULT 5"),
     ]
     with engine.connect() as conn:
         for table, col_def in new_columns:

@@ -62,6 +62,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pagination_prev": "← Précédent",
         "pagination_next": "Suivant →",
 
+        # Follow-up (relance)
+        "followup_title": "Relance",
+        "followup_days_since": "Envoyé il y a",
+        "followup_sent_on": "Relance envoyée le",
+        "followup_not_eligible": "Le recruteur a répondu — pas de relance nécessaire.",
+        "followup_send_confirm": "Envoyer cette relance dans le fil existant ?",
+        "followup_ai_warning": "Brouillon généré par IA — relis chaque ligne avant d'envoyer.",
+        "followup_send": "Envoyer la relance",
+        "followup_regenerate": "Régénérer",
+        "followup_scheduled_hint": "Relance automatique prévue après",
+        "followup_no_reply_suffix": "sans réponse.",
+        "followup_pitch": "Pas de réponse — génère une relance polie dans le même fil email.",
+        "followup_generate": "Générer une relance",
+        "settings_followup_delay": "Délai de relance (jours sans réponse)",
+
         # Job detail
         "back_dashboard": "Dashboard",
         "job_view_offer": "Voir l'offre",
@@ -267,6 +282,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "pagination_prev": "← Previous",
         "pagination_next": "Next →",
 
+        # Follow-up (relance)
+        "followup_title": "Follow-up",
+        "followup_days_since": "Sent",
+        "followup_sent_on": "Follow-up sent on",
+        "followup_not_eligible": "The recruiter replied — no follow-up needed.",
+        "followup_send_confirm": "Send this follow-up in the existing thread?",
+        "followup_ai_warning": "AI-generated draft — proofread every line before sending.",
+        "followup_send": "Send follow-up",
+        "followup_regenerate": "Regenerate",
+        "followup_scheduled_hint": "Automatic follow-up scheduled after",
+        "followup_no_reply_suffix": "without a reply.",
+        "followup_pitch": "No reply — generate a polite follow-up in the same email thread.",
+        "followup_generate": "Generate a follow-up",
+        "settings_followup_delay": "Follow-up delay (days without reply)",
+
         # Job detail
         "back_dashboard": "Dashboard",
         "job_view_offer": "View job",
@@ -471,6 +501,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "filter_with_contact": "Con contacto",
         "pagination_prev": "← Anterior",
         "pagination_next": "Siguiente →",
+
+        # Follow-up (relance)
+        "followup_title": "Seguimiento",
+        "followup_days_since": "Enviado hace",
+        "followup_sent_on": "Seguimiento enviado el",
+        "followup_not_eligible": "El reclutador respondió — no hace falta seguimiento.",
+        "followup_send_confirm": "¿Enviar este seguimiento en el hilo existente?",
+        "followup_ai_warning": "Borrador generado por IA — revisa cada línea antes de enviar.",
+        "followup_send": "Enviar seguimiento",
+        "followup_regenerate": "Regenerar",
+        "followup_scheduled_hint": "Seguimiento automático previsto tras",
+        "followup_no_reply_suffix": "sin respuesta.",
+        "followup_pitch": "Sin respuesta — genera un seguimiento cortés en el mismo hilo.",
+        "followup_generate": "Generar un seguimiento",
+        "settings_followup_delay": "Plazo de seguimiento (días sin respuesta)",
 
         # Job detail
         "back_dashboard": "Panel",

@@ -1,0 +1,80 @@
+{# Follow-up (relance) section — states: sent / draft ready / eligible (no draft) / hidden.
+   Swapped via HTMX (hx-target="#followup-section", hx-swap="outerHTML").
+   Context: job_id, followup_app (dict|None), followup_days, followup_delay_days, t #}
+{% if followup_app and followup_app.gmail_thread_id and followup_app.status in ("submitted", "replied", "interview", "offer") %}
+<div id="followup-section" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+      {{ t.followup_title if t else "Relance" }}
+    </h2>
+    {% if followup_days is not none %}
+    <span class="text-xs text-gray-400">
+      {{ t.followup_days_since if t else "Envoyé il y a" }} {{ followup_days }}j
+    </span>
+    {% endif %}
+  </div>
+
+  {% if followup_app.followup_sent_at %}
+  <p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+    ✓ {{ t.followup_sent_on if t else "Relance envoyée le" }} {{ followup_app.followup_sent_at[:10] }}
+  </p>
+
+  {% elif followup_app.status != "submitted" %}
+  <p class="text-sm text-gray-400">
+    {{ t.followup_not_eligible if t else "Le recruteur a répondu — pas de relance nécessaire." }}
+  </p>
+
+  {% elif followup_app.followup_draft_subject or followup_app.followup_draft_body %}
+  <form hx-post="/jobs/{{ job_id }}/send-followup"
+        hx-target="#followup-section" hx-swap="outerHTML"
+        hx-confirm="{{ t.followup_send_confirm if t else 'Envoyer cette relance dans le fil existant ?' }}"
+        class="space-y-2">
+    <input type="text" name="subject" value="{{ followup_app.followup_draft_subject or '' }}"
+           class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                  focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+    <textarea name="body" rows="6"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed
+                     focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">{{ followup_app.followup_draft_body or '' }}</textarea>
+    <div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+      <p class="text-xs text-amber-800">⚠ {{ t.followup_ai_warning if t else "Brouillon généré par IA — relis chaque ligne avant d'envoyer." }}</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="submit"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+        {{ t.followup_send if t else "Envoyer la relance" }}
+      </button>
+      <button type="button"
+              hx-post="/jobs/{{ job_id }}/draft-followup"
+              hx-target="#followup-section" hx-swap="outerHTML"
+              class="px-3 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+        {{ t.followup_regenerate if t else "Régénérer" }}
+      </button>
+    </div>
+  </form>
+
+  {% else %}
+  <div class="space-y-2">
+    {% if followup_days is not none and followup_days < followup_delay_days %}
+    <p class="text-sm text-gray-500">
+      {{ t.followup_scheduled_hint if t else "Relance automatique prévue après" }} {{ followup_delay_days }}j
+      {{ t.followup_no_reply_suffix if t else "sans réponse." }}
+    </p>
+    {% else %}
+    <p class="text-sm text-gray-500">
+      {{ t.followup_pitch if t else "Pas de réponse — génère une relance polie dans le même fil email." }}
+    </p>
+    {% endif %}
+    <button hx-post="/jobs/{{ job_id }}/draft-followup"
+            hx-target="#followup-section" hx-swap="outerHTML"
+            hx-indicator="#followup-spinner"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
+      <svg id="followup-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+      </svg>
+      {{ t.followup_generate if t else "Générer une relance" }}
+    </button>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

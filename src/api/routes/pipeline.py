@@ -579,6 +579,110 @@ async def _run_respond(user_id: int) -> None:
         tracker.error("respond", str(exc), user_id=user_id)
 
 
+async def _run_followup(user_id: int) -> None:
+    """Follow-up phase: draft relance emails for stale submitted applications.
+
+    Eligible: status SUBMITTED, has a Gmail thread, no follow-up sent or drafted
+    yet, submitted more than user.followup_delay_days ago. Drafts only — sending
+    stays manual on the job page (and respects dry_run there).
+    """
+    try:
+        user = _load_user(user_id)
+        if user is None:
+            tracker.error("followup", f"User {user_id} not found", user_id=user_id)
+            return
+
+        from datetime import datetime, timezone
+
+        from src.analysis.recruiter_finder import _build_llm_client
+        from src.communications.followup_writer import draft_followup
+        from src.storage.models import Application, ApplicationStatus
+
+        user_cfg = get_settings_for_user(user)
+        client = _build_llm_client(user_cfg)
+        if client is None:
+            tracker.error(
+                "followup",
+                "LLM provider not configured — set your API key in Settings",
+                user_id=user_id,
+            )
+            return
+
+        delay_days = int(user_cfg.get("followup_delay_days") or 5)
+        now = datetime.now(timezone.utc)
+
+        with get_session() as session:
+            candidates = (
+                session.query(Application)
+                .filter(
+                    Application.user_id == user_id,
+                    Application.status == ApplicationStatus.SUBMITTED,
+                    Application.gmail_thread_id.isnot(None),
+                    Application.followup_sent_at.is_(None),
+                    Application.followup_generated_at.is_(None),
+                )
+                .all()
+            )
+            stale: list[dict] = []
+            for app in candidates:
+                sub = app.submitted_at
+                if sub is None:
+                    continue
+                if sub.tzinfo is None:
+                    sub = sub.replace(tzinfo=timezone.utc)
+                days_since = (now - sub).days
+                if days_since < delay_days:
+                    continue
+                stale.append(
+                    {
+                        "app_id": app.id,
+                        "job_title": app.job.title if app.job else "(unknown)",
+                        "company_name": (
+                            app.job.company.name
+                            if app.job and app.job.company
+                            else "(unknown)"
+                        ),
+                        "original_subject": app.recruiter.draft_subject if app.recruiter else None,
+                        "original_body": app.recruiter.draft_body if app.recruiter else None,
+                        "days_since": days_since,
+                    }
+                )
+
+        profile = get_profile_for_user(user)
+        drafted = 0
+        for item in stale:
+            try:
+                subject, body = await draft_followup(
+                    item["job_title"],
+                    item["company_name"],
+                    item["original_subject"],
+                    item["original_body"],
+                    item["days_since"],
+                    profile,
+                    client,
+                )
+            except ValueError as exc:
+                logger.warning("Follow-up draft failed for app %d: %s", item["app_id"], exc)
+                continue
+            with get_session() as session:
+                app = session.get(Application, item["app_id"])
+                if app is None:
+                    continue
+                app.followup_draft_subject = subject
+                app.followup_draft_body = body
+                app.followup_generated_at = datetime.now(timezone.utc)
+            drafted += 1
+
+        tracker.done(
+            "followup",
+            user_id=user_id,
+            result={"eligible": len(stale), "drafts_created": drafted},
+        )
+    except Exception as exc:
+        logger.exception("Follow-up phase failed for user %d", user_id)
+        tracker.error("followup", str(exc), user_id=user_id)
+
+
 # ---------------------------------------------------------------------------
 # Route helpers
 # ---------------------------------------------------------------------------
@@ -685,6 +789,30 @@ async def trigger_respond(
         status="started",
         phase="respond",
         message="Respond phase started. Check /api/pipeline/status for progress.",
+    )
+
+
+@router.post("/followup", response_model=PipelineStartResponse)
+async def trigger_followup(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+) -> PipelineStartResponse:
+    """Launch the follow-up (relance drafts) phase in the background."""
+    await _atomic_start("followup", current_user.id)
+    user_cfg = get_settings_for_user(current_user)
+    if not any(
+        user_cfg.get(k)
+        for k in ("anthropic_api_key", "openai_api_key", "mistral_api_key",
+                  "deepseek_api_key", "openrouter_api_key")
+    ):
+        detail = "AI provider API key not configured. Set it in credentials or .env."
+        tracker.error("followup", detail, user_id=current_user.id)
+        raise HTTPException(status_code=400, detail=detail)
+    background_tasks.add_task(_run_followup, current_user.id)
+    return PipelineStartResponse(
+        status="started",
+        phase="followup",
+        message="Follow-up phase started. Check /api/pipeline/status for progress.",
     )
 
 
