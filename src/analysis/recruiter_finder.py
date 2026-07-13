@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 _HUNTER_URL = "https://api.hunter.io/v2/domain-search"
 _BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 _GOOGLE_CSE_URL = "https://www.googleapis.com/customsearch/v1"
-_HTTP_TIMEOUT = 15.0
+_HTTP_TIMEOUT = 25.0
 
 # Keywords marking a recruiting-related position (EN + FR).
 _RECRUITER_TITLE_RE = re.compile(
