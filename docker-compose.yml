@@ -48,7 +48,8 @@ services:
       - PROFILE_PATH=/profile/profile.yaml
     restart: unless-stopped
     command: >
-      sh -c "cp /etc/cron.d/jobhunter-cron /tmp/jobhunter-cron
+      sh -c "printenv > /etc/environment
+      && cp /etc/cron.d/jobhunter-cron /tmp/jobhunter-cron
       && chmod 0644 /tmp/jobhunter-cron
       && crontab /tmp/jobhunter-cron
       && cron -f"
