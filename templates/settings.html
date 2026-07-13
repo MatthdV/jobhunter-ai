@@ -220,7 +220,7 @@
       {# --- Sources Playwright (credentials utilisateur) --- #}
       {% for src_name, src_label, src_desc in [
           ('wttj',     'Welcome to the Jungle', 'Scraper Playwright — offres FR principalement'),
-          ('linkedin', 'LinkedIn',              'Scraper Playwright — nécessite un compte LinkedIn'),
+          ('linkedin', 'LinkedIn',              'API invités LinkedIn — sans compte, sans clé'),
       ] %}
       {% set sc = source_configs.get(src_name, {}) %}
       <div class="border-b border-gray-50 last:border-0 py-3">
