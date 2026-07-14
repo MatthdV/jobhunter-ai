@@ -454,6 +454,79 @@
     </div>
   </div>
 
+  <!-- ===== Gmail ===== -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="text-base font-semibold text-gray-800">{{ t.gmail_section_title if t else "Gmail" }}</h2>
+      <p class="text-xs text-gray-400 mt-0.5">{{ t.gmail_section_subtitle if t else "Connectez votre compte Gmail pour envoyer les candidatures et relances depuis votre adresse." }}</p>
+    </div>
+    <div class="px-6 py-5">
+      {% if current_user.gmail_connected_email %}
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+          <span class="text-sm text-gray-700">
+            {{ t.gmail_connected_as if t else "Connecté en tant que" }}
+            <span class="font-medium">{{ current_user.gmail_connected_email }}</span>
+            {% if current_user.gmail_connected_at %}
+            <span class="text-gray-400">
+              {{ t.gmail_connected_since if t else "depuis le" }}
+              {{ current_user.gmail_connected_at.strftime("%d/%m/%Y") }}
+            </span>
+            {% endif %}
+          </span>
+        </div>
+        <form method="post" action="/settings/gmail/disconnect">
+          <button type="submit"
+                  class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg
+                         hover:bg-gray-200 transition-colors">
+            {{ t.gmail_disconnect_btn if t else "Déconnecter" }}
+          </button>
+        </form>
+      </div>
+      {% elif gmail_oauth_ready %}
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>
+          <span class="text-sm text-gray-500">{{ t.gmail_not_connected if t else "Aucun compte Gmail connecté — l'envoi d'emails est désactivé." }}</span>
+        </div>
+        <a href="/settings/gmail/connect"
+           class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg
+                  hover:bg-indigo-700 transition-colors inline-block">
+          {{ t.gmail_connect_btn if t else "Connecter Gmail" }}
+        </a>
+      </div>
+      {% else %}
+      <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+        {{ t.gmail_admin_hint if t else "Le client OAuth Google n'est pas configuré sur ce serveur (GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET). Contactez l'administrateur." }}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if gmail_status %}
+  <script>
+    (function () {
+      const messages = {
+        connected: { text: {{ (t.gmail_toast_connected if t else "Gmail connecté avec succès.") | tojson }}, type: "success" },
+        disconnected: { text: {{ (t.gmail_toast_disconnected if t else "Gmail déconnecté.") | tojson }}, type: "success" },
+        denied: { text: {{ (t.gmail_toast_denied if t else "Connexion Gmail annulée.") | tojson }}, type: "error" },
+        error: { text: {{ (t.gmail_toast_error if t else "Échec de la connexion Gmail.") | tojson }}, type: "error" },
+      };
+      const status = {{ gmail_status | tojson }};
+      // Defer until DOM ready — showToast is defined in base.html's bottom script
+      document.addEventListener("DOMContentLoaded", function () {
+        const msg = messages[status];
+        if (msg && typeof showToast === "function") showToast(msg.text, msg.type);
+        // Clean the query param so a refresh doesn't replay the toast
+        if (window.history.replaceState) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      });
+    })();
+  </script>
+  {% endif %}
+
   <!-- ===== Recherche recruteur ===== -->
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-100">

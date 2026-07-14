@@ -99,7 +99,7 @@ class TestEmailHandlerInit:
     def test_init_raises_without_gmail_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "src.communications.email_handler.settings",
-            MagicMock(is_gmail_configured=False),
+            MagicMock(gmail_client_id="", gmail_client_secret="", gmail_refresh_token=""),
         )
         with patch("src.communications.email_handler.EmailHandler._build_service"):
             from src.communications.email_handler import EmailHandler

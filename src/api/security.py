@@ -89,6 +89,38 @@ def decode_reset_token(token: str, secret: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# OAuth state tokens (CSRF protection for the Gmail connect flow)
+# ---------------------------------------------------------------------------
+
+_OAUTH_STATE_EXPIRE_MINUTES = 10
+
+
+def create_oauth_state_token(user_id: int, secret: str) -> str:
+    """Return a signed JWT used as the OAuth `state` parameter, valid 10 minutes.
+
+    Carries ``type=gmail_oauth`` so access/reset tokens can't be replayed as
+    an OAuth state and vice versa.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=_OAUTH_STATE_EXPIRE_MINUTES)
+    payload = {"sub": str(user_id), "type": "gmail_oauth", "exp": expire}
+    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
+
+
+def decode_oauth_state_token(token: str, secret: str) -> int | None:
+    """Decode an OAuth state token and return user_id, or None if invalid/expired/wrong type."""
+    try:
+        payload = jwt.decode(token, secret, algorithms=[_ALGORITHM])
+        if payload.get("type") != "gmail_oauth":
+            return None
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        return int(sub)
+    except (JWTError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Fernet credential encryption
 # ---------------------------------------------------------------------------
 

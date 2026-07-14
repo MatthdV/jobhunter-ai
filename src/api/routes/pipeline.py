@@ -521,7 +521,7 @@ async def _run_respond(user_id: int) -> None:
         if not gmail_configured:
             tracker.error(
                 "respond",
-                "Gmail not configured — set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN",
+                "Gmail not configured — connect Gmail in Settings",
                 user_id=user_id,
             )
             return
@@ -530,7 +530,7 @@ async def _run_respond(user_id: int) -> None:
         from src.communications.recruiter_responder import RecruiterResponder
         from src.storage.models import Application, ApplicationStatus
 
-        email_handler = EmailHandler()
+        email_handler = EmailHandler(user_cfg)
         responder = RecruiterResponder()
 
         with get_session() as session:

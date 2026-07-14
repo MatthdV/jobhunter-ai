@@ -55,8 +55,11 @@ def get_settings_for_user(user: User) -> dict[str, Any]:
         "mistral_api_key": "",
         "deepseek_api_key": "",
         "openrouter_api_key": "",
-        "gmail_client_id": "",
-        "gmail_client_secret": "",
+        # In-app Gmail connect: client id/secret come from the instance-wide
+        # OAuth web client; only the refresh token is per-user. A user who
+        # configured a legacy personal GCP client still overrides these below.
+        "gmail_client_id": settings.gmail_oauth_client_id,
+        "gmail_client_secret": settings.gmail_oauth_client_secret,
         "gmail_refresh_token": "",
         "gmail_user_email": "",
         "telegram_bot_token": "",

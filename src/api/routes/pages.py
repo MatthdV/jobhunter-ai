@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 import json
@@ -15,6 +15,12 @@ import json
 from src.api.background import tracker
 from src.api.deps import require_user_redirect
 from src.api.i18n import get_t, get_ui_lang
+from src.api.security import (
+    create_oauth_state_token,
+    decode_oauth_state_token,
+    decrypt_keys,
+    encrypt_keys,
+)
 from src.config.settings import settings
 from src.storage.database import get_session
 from src.storage.models import (
@@ -668,7 +674,7 @@ async def send_recruiter_email(
 
     from src.communications.email_handler import EmailHandler
 
-    email_handler = EmailHandler()
+    email_handler = EmailHandler(user_cfg)
     try:
         gmail_thread_id = await email_handler.send(
             to=recruiter_email,
@@ -858,7 +864,7 @@ async def send_followup_email(
 
     from src.communications.email_handler import EmailHandler
 
-    email_handler = EmailHandler()
+    email_handler = EmailHandler(user_cfg)
     try:
         await email_handler.send(
             to=recruiter_email,
@@ -1003,6 +1009,8 @@ def _build_settings_context(request: Request, current_user: User, extra: dict | 
         "global_creds": get_global_credential_names(),
         "t": get_t(current_user),
         "current_lang": get_ui_lang(current_user),
+        "gmail_oauth_ready": _gmail_oauth_ready(),
+        "gmail_status": request.query_params.get("gmail", ""),
     }
     if extra:
         ctx.update(extra)
@@ -1020,6 +1028,176 @@ def settings_page(
         "settings.html",
         _build_settings_context(request, current_user),
     )
+
+
+# ---------------------------------------------------------------------------
+# Gmail OAuth connect flow ("Connecter Gmail")
+# ---------------------------------------------------------------------------
+
+_GMAIL_SCOPES = ["https://mail.google.com/"]
+
+
+def _gmail_oauth_ready() -> bool:
+    """True if the instance-wide Google OAuth web client is configured."""
+    return bool(settings.gmail_oauth_client_id and settings.gmail_oauth_client_secret)
+
+
+def _gmail_redirect_uri(request: Request) -> str:
+    """Callback URI to hand to Google — must exactly match a URI declared in GCP."""
+    base = str(request.base_url).rstrip("/")
+    if request.url.hostname not in ("localhost", "127.0.0.1") and base.startswith("http://"):
+        # Behind the TLS proxy the app sees plain HTTP; Google only knows the https URI.
+        base = "https://" + base[len("http://"):]
+    return f"{base}/settings/gmail/callback"
+
+
+def _build_gmail_flow(redirect_uri: str):
+    from google_auth_oauthlib.flow import Flow
+
+    client_config = {
+        "web": {
+            "client_id": settings.gmail_oauth_client_id,
+            "client_secret": settings.gmail_oauth_client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=_GMAIL_SCOPES, redirect_uri=redirect_uri)
+
+
+def _gmail_profile_email(credentials) -> str:
+    """Fetch the email address of the account that just granted access."""
+    try:
+        from googleapiclient.discovery import build
+
+        service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+        profile = service.users().getProfile(userId="me").execute()
+        return str(profile.get("emailAddress", ""))
+    except Exception:
+        logger.exception("Could not fetch connected Gmail address")
+        return ""
+
+
+def _update_user_credentials(user_id: int, updates: dict[str, str]) -> None:
+    """Merge *updates* into the user's encrypted credential blob (empty = delete)."""
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        existing: dict = (
+            decrypt_keys(user.encrypted_keys, settings.fernet_key)
+            if user.encrypted_keys
+            else {}
+        )
+        for k, v in updates.items():
+            if v:
+                existing[k] = v
+            else:
+                existing.pop(k, None)
+        user.encrypted_keys = encrypt_keys(existing, settings.fernet_key)  # type: ignore[assignment]
+
+
+@router.get("/settings/gmail/connect")
+def gmail_connect(
+    request: Request,
+    current_user: User = Depends(require_user_redirect),
+) -> RedirectResponse:
+    """Redirect the user to Google's consent screen to link their Gmail."""
+    if not _gmail_oauth_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Gmail OAuth client not configured — set GMAIL_OAUTH_CLIENT_ID "
+                   "and GMAIL_OAUTH_CLIENT_SECRET in .env",
+        )
+    if not settings.fernet_key:
+        raise HTTPException(
+            status_code=503,
+            detail="FERNET_KEY not configured — cannot store the refresh token",
+        )
+    state = create_oauth_state_token(current_user.id, settings.jwt_secret)
+    flow = _build_gmail_flow(_gmail_redirect_uri(request))
+    # access_type=offline + prompt=consent forces Google to return a refresh token
+    # even when the user already granted access before.
+    auth_url, _ = flow.authorization_url(
+        access_type="offline", prompt="consent", state=state
+    )
+    return RedirectResponse(auth_url, status_code=302)
+
+
+@router.get("/settings/gmail/callback")
+def gmail_callback(
+    request: Request,
+    state: str = Query(""),
+    code: str = Query(""),
+    error: str = Query(""),
+    current_user: User = Depends(require_user_redirect),
+):
+    """Handle Google's redirect: validate state, exchange code, store the token."""
+    if error:
+        return RedirectResponse("/settings?gmail=denied", status_code=302)
+    state_user_id = decode_oauth_state_token(state, settings.jwt_secret)
+    if state_user_id is None or state_user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
+
+    flow = _build_gmail_flow(_gmail_redirect_uri(request))
+    try:
+        flow.fetch_token(code=code)
+    except Exception:
+        logger.exception("Gmail OAuth code exchange failed for user %d", current_user.id)
+        return RedirectResponse("/settings?gmail=error", status_code=302)
+
+    refresh_token = getattr(flow.credentials, "refresh_token", None)
+    if not refresh_token:
+        logger.error("Google returned no refresh token for user %d", current_user.id)
+        return RedirectResponse("/settings?gmail=error", status_code=302)
+
+    connected_email = _gmail_profile_email(flow.credentials)
+    _update_user_credentials(
+        current_user.id,
+        {"gmail_refresh_token": refresh_token, "gmail_user_email": connected_email},
+    )
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is not None:
+            user.gmail_connected_email = connected_email or None  # type: ignore[assignment]
+            user.gmail_connected_at = datetime.now(timezone.utc)  # type: ignore[assignment]
+    return RedirectResponse("/settings?gmail=connected", status_code=302)
+
+
+@router.post("/settings/gmail/disconnect")
+def gmail_disconnect(
+    request: Request,
+    current_user: User = Depends(require_user_redirect),
+) -> RedirectResponse:
+    """Revoke the Google token (best effort) and forget it locally."""
+    refresh_token = ""
+    if current_user.encrypted_keys and settings.fernet_key:
+        refresh_token = decrypt_keys(
+            current_user.encrypted_keys, settings.fernet_key
+        ).get("gmail_refresh_token", "")
+    if refresh_token:
+        try:
+            import httpx
+
+            httpx.post(
+                "https://oauth2.googleapis.com/revoke",
+                data={"token": refresh_token},
+                timeout=10,
+            )
+        except Exception:
+            logger.warning("Gmail token revoke failed — continuing with local disconnect")
+    if settings.fernet_key:
+        _update_user_credentials(
+            current_user.id, {"gmail_refresh_token": "", "gmail_user_email": ""}
+        )
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is not None:
+            user.gmail_connected_email = None  # type: ignore[assignment]
+            user.gmail_connected_at = None  # type: ignore[assignment]
+    return RedirectResponse("/settings?gmail=disconnected", status_code=303)
 
 
 @router.post("/settings/search", response_class=HTMLResponse)

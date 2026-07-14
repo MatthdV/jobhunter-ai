@@ -236,6 +236,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cred_wttj_email_hint": "Email de votre compte Welcome to the Jungle (requis pour le scraping).",
         "cred_wttj_password_hint": "Mot de passe Welcome to the Jungle.",
 
+        # Gmail connect
+        "gmail_section_title": "Gmail",
+        "gmail_section_subtitle": "Connectez votre compte Gmail pour envoyer les candidatures et relances depuis votre adresse.",
+        "gmail_connect_btn": "Connecter Gmail",
+        "gmail_disconnect_btn": "Déconnecter",
+        "gmail_connected_as": "Connecté en tant que",
+        "gmail_connected_since": "depuis le",
+        "gmail_not_connected": "Aucun compte Gmail connecté — l'envoi d'emails est désactivé.",
+        "gmail_admin_hint": "Le client OAuth Google n'est pas configuré sur ce serveur (GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET). Contactez l'administrateur.",
+        "gmail_toast_connected": "Gmail connecté avec succès.",
+        "gmail_toast_disconnected": "Gmail déconnecté.",
+        "gmail_toast_denied": "Connexion Gmail annulée — accès refusé sur l'écran Google.",
+        "gmail_toast_error": "Échec de la connexion Gmail — réessayez.",
+
         # Language toggle
         "lang_toggle_label": "Langue",
     },
@@ -464,6 +478,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cred_wttj_email_hint": "Your Welcome to the Jungle account email (required for scraping).",
         "cred_wttj_password_hint": "Your Welcome to the Jungle password.",
 
+        # Gmail connect
+        "gmail_section_title": "Gmail",
+        "gmail_section_subtitle": "Connect your Gmail account to send applications and follow-ups from your own address.",
+        "gmail_connect_btn": "Connect Gmail",
+        "gmail_disconnect_btn": "Disconnect",
+        "gmail_connected_as": "Connected as",
+        "gmail_connected_since": "since",
+        "gmail_not_connected": "No Gmail account connected — email sending is disabled.",
+        "gmail_admin_hint": "The Google OAuth client is not configured on this server (GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET). Contact the administrator.",
+        "gmail_toast_connected": "Gmail connected successfully.",
+        "gmail_toast_disconnected": "Gmail disconnected.",
+        "gmail_toast_denied": "Gmail connection cancelled — access denied on the Google screen.",
+        "gmail_toast_error": "Gmail connection failed — please try again.",
+
         # Language toggle
         "lang_toggle_label": "Language",
     },
@@ -691,6 +719,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cred_anthropic_hint": "Opcional — si prefieres Claude directamente.",
         "cred_wttj_email_hint": "Email de tu cuenta Welcome to the Jungle (requerido para el scraping).",
         "cred_wttj_password_hint": "Contraseña de Welcome to the Jungle.",
+
+        # Gmail connect
+        "gmail_section_title": "Gmail",
+        "gmail_section_subtitle": "Conecta tu cuenta de Gmail para enviar candidaturas y seguimientos desde tu propia dirección.",
+        "gmail_connect_btn": "Conectar Gmail",
+        "gmail_disconnect_btn": "Desconectar",
+        "gmail_connected_as": "Conectado como",
+        "gmail_connected_since": "desde el",
+        "gmail_not_connected": "Ninguna cuenta de Gmail conectada — el envío de emails está desactivado.",
+        "gmail_admin_hint": "El cliente OAuth de Google no está configurado en este servidor (GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET). Contacta al administrador.",
+        "gmail_toast_connected": "Gmail conectado con éxito.",
+        "gmail_toast_disconnected": "Gmail desconectado.",
+        "gmail_toast_denied": "Conexión de Gmail cancelada — acceso denegado en la pantalla de Google.",
+        "gmail_toast_error": "Error al conectar Gmail — inténtalo de nuevo.",
 
         # Language toggle
         "lang_toggle_label": "Idioma",

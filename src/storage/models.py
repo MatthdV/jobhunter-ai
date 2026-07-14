@@ -70,6 +70,8 @@ class User(Base):
     max_days_old = Column(Integer, default=30)
     recruiter_auto_find = Column(Boolean, default=False)
     followup_delay_days = Column(Integer, default=5)
+    gmail_connected_email = Column(String(255), nullable=True)  # address linked via in-app OAuth
+    gmail_connected_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

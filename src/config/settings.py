@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     gmail_refresh_token: str = Field("", description="OAuth2 refresh token")
     gmail_user_email: str = Field("", description="Gmail address used for sending/reading")
 
+    # --- Gmail OAuth (in-app "Connect Gmail" flow) ---
+    # One Google OAuth *web* client shared by the whole instance; each user's
+    # refresh token is obtained via /settings/gmail/connect and stored
+    # encrypted per-user. Distinct from the legacy per-user gmail_client_id.
+    gmail_oauth_client_id: str = Field("", description="Google OAuth web client ID for in-app Gmail connect")
+    gmail_oauth_client_secret: str = Field("", description="Google OAuth web client secret")
+
     # --- Telegram ---
     telegram_bot_token: str = Field("", description="Telegram bot token from @BotFather")
     telegram_chat_id: str = Field("", description="Your personal Telegram chat ID")

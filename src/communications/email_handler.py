@@ -43,14 +43,26 @@ class EmailHandler:
         )
     """
 
-    def __init__(self) -> None:
-        """Build Gmail API client from credentials in Settings."""
-        if not settings.is_gmail_configured:
+    def __init__(self, user_cfg: dict[str, Any] | None = None) -> None:
+        """Build Gmail API client from per-user credentials or global Settings.
+
+        Args:
+            user_cfg: Effective settings dict from get_settings_for_user().
+                When provided, gmail_client_id/secret/refresh_token/user_email
+                are taken from it; empty values fall back to global settings
+                (legacy .env config) for backward compatibility.
+        """
+        cfg = user_cfg or {}
+        self._client_id = cfg.get("gmail_client_id") or settings.gmail_client_id
+        self._client_secret = cfg.get("gmail_client_secret") or settings.gmail_client_secret
+        self._refresh_token = cfg.get("gmail_refresh_token") or settings.gmail_refresh_token
+        if not (self._client_id and self._client_secret and self._refresh_token):
             raise ConfigurationError(
-                "Gmail credentials are not configured — set GMAIL_CLIENT_ID, "
-                "GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN in .env"
+                "Gmail credentials are not configured — connect Gmail in "
+                "Settings, or set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and "
+                "GMAIL_REFRESH_TOKEN in .env"
             )
-        self._user = settings.gmail_user_email or "me"
+        self._user = cfg.get("gmail_user_email") or settings.gmail_user_email or "me"
         self._service: Any = self._build_service()
 
     def _build_service(self) -> Any:
@@ -61,10 +73,10 @@ class EmailHandler:
 
         creds = Credentials(  # type: ignore[no-untyped-call]
             token=None,
-            refresh_token=settings.gmail_refresh_token,
+            refresh_token=self._refresh_token,
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.gmail_client_id,
-            client_secret=settings.gmail_client_secret,
+            client_id=self._client_id,
+            client_secret=self._client_secret,
             scopes=["https://mail.google.com/"],
         )
         # Refresh to obtain a valid access token

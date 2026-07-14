@@ -130,6 +130,9 @@ def _migrate_schema(engine: Engine) -> None:
         ("applications", "followup_generated_at DATETIME"),
         ("applications", "followup_sent_at DATETIME"),
         ("users", "followup_delay_days INTEGER DEFAULT 5"),
+        # In-app Gmail OAuth connect
+        ("users", "gmail_connected_email VARCHAR(255)"),
+        ("users", "gmail_connected_at DATETIME"),
     ]
     with engine.connect() as conn:
         for table, col_def in new_columns:
