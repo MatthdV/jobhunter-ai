@@ -45,6 +45,7 @@
     {% set _channel_labels = {
       "poster": (t.channel_poster if t else "Recruteur de l'offre contacté", "bg-blue-500"),
       "recruiter_email": (t.channel_recruiter_email if t else "Email direct recruteur", "bg-emerald-500"),
+      "linkedin_dm": (t.channel_linkedin_dm if t else "DM LinkedIn", "bg-sky-500"),
       "portal": (t.channel_portal if t else "Apply portail", "bg-gray-400"),
     } %}
     <div class="space-y-3">

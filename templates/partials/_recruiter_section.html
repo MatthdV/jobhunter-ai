@@ -109,6 +109,96 @@
     </div>
     {% endif %}
 
+    {% if recruiter.linkedin_url %}
+    <div class="pt-2 border-t border-gray-100 space-y-3">
+      <div class="flex items-center justify-between">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {{ t.dm_section_title if t else "Message LinkedIn (envoi manuel)" }}
+        </p>
+        {% if recruiter.dm_sent_at %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-sky-50 text-sky-700">
+          ✓ {{ t.dm_sent_badge if t else "DM envoyé le" }} {{ recruiter.dm_sent_at }}
+        </span>
+        {% endif %}
+      </div>
+
+      {% if recruiter.dm_invite_note or recruiter.dm_message %}
+      <div class="space-y-2">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-medium text-gray-600">
+              {{ t.dm_invite_label if t else "Note d'invitation (max 300 caractères)" }}
+            </label>
+            <span class="text-[11px] text-gray-400">
+              <span id="dm-invite-count-{{ job_id }}">{{ (recruiter.dm_invite_note or '') | length }}</span>/300
+            </span>
+          </div>
+          <textarea id="dm-invite-{{ job_id }}" rows="3" maxlength="300"
+                    oninput="document.getElementById('dm-invite-count-{{ job_id }}').textContent = this.value.length"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed
+                           focus:border-sky-500 focus:ring-1 focus:ring-sky-500">{{ recruiter.dm_invite_note or '' }}</textarea>
+          <button type="button" data-label="{{ t.dm_copy_invite if t else 'Copier la note' }}"
+                  onclick="navigator.clipboard.writeText(document.getElementById('dm-invite-{{ job_id }}').value); this.textContent='✓'; setTimeout(() => this.textContent = this.dataset.label, 1200)"
+                  class="mt-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            {{ t.dm_copy_invite if t else "Copier la note" }}
+          </button>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">
+            {{ t.dm_message_label if t else "Message une fois connecté (ou InMail)" }}
+          </label>
+          <textarea id="dm-message-{{ job_id }}" rows="5"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed
+                           focus:border-sky-500 focus:ring-1 focus:ring-sky-500">{{ recruiter.dm_message or '' }}</textarea>
+          <button type="button" data-label="{{ t.dm_copy_message if t else 'Copier le message' }}"
+                  onclick="navigator.clipboard.writeText(document.getElementById('dm-message-{{ job_id }}').value); this.textContent='✓'; setTimeout(() => this.textContent = this.dataset.label, 1200)"
+                  class="mt-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            {{ t.dm_copy_message if t else "Copier le message" }}
+          </button>
+        </div>
+        <div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <p class="text-xs text-amber-800">
+            {{ t.dm_ai_warning if t else "⚠ Brouillon généré par IA — relis chaque ligne avant de l'envoyer. L'envoi reste 100 % manuel, depuis ton compte LinkedIn." }}
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="{{ recruiter.linkedin_url }}" target="_blank" rel="noopener noreferrer"
+             class="px-4 py-2 bg-[#0A66C2] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
+            {{ t.dm_open_profile if t else "Ouvrir le profil LinkedIn" }}
+          </a>
+          {% if not recruiter.dm_sent_at %}
+          <button hx-post="/jobs/{{ job_id }}/mark-dm-sent"
+                  hx-target="#recruiter-section" hx-swap="outerHTML"
+                  hx-confirm="{{ t.dm_mark_sent_confirm if t else 'Marquer ce DM comme envoyé sur LinkedIn ?' }}"
+                  class="px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
+            {{ t.dm_mark_sent if t else "Marquer comme envoyé" }}
+          </button>
+          {% endif %}
+          <button hx-post="/jobs/{{ job_id }}/draft-linkedin-dm"
+                  hx-target="#recruiter-section" hx-swap="outerHTML"
+                  class="px-3 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            {{ t.recruiter_redraft if t else "Régénérer" }}
+          </button>
+        </div>
+      </div>
+      {% else %}
+      <button hx-post="/jobs/{{ job_id }}/draft-linkedin-dm"
+              hx-target="#recruiter-section" hx-swap="outerHTML"
+              hx-indicator="#dm-spinner"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-[#0A66C2] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
+        <svg id="dm-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+        </svg>
+        {{ t.dm_draft_btn if t else "Générer un DM LinkedIn" }}
+      </button>
+      <p class="text-xs text-gray-400">
+        {{ t.dm_pitch if t else "L'IA rédige la note d'invitation et le message — tu les colles toi-même sur LinkedIn. Zéro automatisation, zéro risque pour ton compte." }}
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div class="pt-1">
       <button hx-post="/jobs/{{ job_id }}/find-recruiter"
               hx-target="#recruiter-section" hx-swap="outerHTML"

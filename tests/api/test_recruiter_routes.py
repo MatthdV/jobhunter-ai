@@ -279,3 +279,57 @@ def test_send_creates_application_and_thread(client):
         app_row = s.query(Application).one()
         assert app_row.gmail_thread_id == "thread-42"
         assert app_row.recruiter_id is not None
+
+
+# ---------------------------------------------------------------------------
+# POST /jobs/{id}/draft-linkedin-dm + /jobs/{id}/mark-dm-sent
+# ---------------------------------------------------------------------------
+
+
+def test_draft_linkedin_dm_persists_draft(client):
+    job_id = _seed_job(with_recruiter=True, recruiter_email="jane@acme.io",
+                       search_status="found")
+    fake_client = object()
+    with patch("src.analysis.recruiter_finder._build_llm_client",
+               return_value=fake_client), \
+         patch("src.api.user_settings.get_settings_for_user", return_value=_KEYS_OK), \
+         patch("src.config.profile.get_profile_for_user", return_value={"candidate": {}}), \
+         patch("src.communications.outreach_writer.draft_linkedin_dm",
+               new_callable=AsyncMock, return_value=("Note invitation", "Message complet")):
+        r = client.post(f"/jobs/{job_id}/draft-linkedin-dm")
+    assert r.status_code == 200
+    assert "Note invitation" in r.text and "Message complet" in r.text
+    with _db_module.get_session() as s:
+        rec = s.query(Recruiter).one()
+        assert rec.dm_invite_note == "Note invitation"
+        assert rec.dm_message == "Message complet"
+        assert rec.dm_sent_at is None
+
+
+def test_draft_linkedin_dm_422_without_recruiter(client):
+    job_id = _seed_job()
+    r = client.post(f"/jobs/{job_id}/draft-linkedin-dm")
+    assert r.status_code == 422
+
+
+def test_mark_dm_sent_records_timestamp(client):
+    job_id = _seed_job(with_recruiter=True, recruiter_email="jane@acme.io",
+                       search_status="found")
+    r = client.post(f"/jobs/{job_id}/mark-dm-sent")
+    assert r.status_code == 200
+    with _db_module.get_session() as s:
+        rec = s.query(Recruiter).one()
+        assert rec.dm_sent_at is not None
+    # The refreshed partial shows the sent badge instead of the mark button
+    assert "Marquer comme envoyé" not in r.text
+
+
+def test_dm_sent_appears_in_channel_stats(client):
+    job_id = _seed_job(with_recruiter=True, recruiter_email="jane@acme.io",
+                       search_status="found")
+    client.post(f"/jobs/{job_id}/mark-dm-sent")
+    from src.api.routes.pages import channel_stats
+    with _db_module.get_session() as s:
+        channels = {c["key"]: c for c in channel_stats(s, _TEST_USER_ID)}
+    assert channels["linkedin_dm"]["sent"] == 1
+    assert channels["linkedin_dm"]["na"] is True

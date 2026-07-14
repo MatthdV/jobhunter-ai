@@ -133,6 +133,10 @@ def _migrate_schema(engine: Engine) -> None:
         # In-app Gmail OAuth connect
         ("users", "gmail_connected_email VARCHAR(255)"),
         ("users", "gmail_connected_at DATETIME"),
+        # Semi-manual LinkedIn DM outreach
+        ("recruiters", "dm_invite_note TEXT"),
+        ("recruiters", "dm_message TEXT"),
+        ("recruiters", "dm_sent_at DATETIME"),
     ]
     with engine.connect() as conn:
         for table, col_def in new_columns:

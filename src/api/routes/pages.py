@@ -136,10 +136,20 @@ def channel_stats(session, user_id: int) -> list[dict]:
         if status in _CHANNEL_REPLY_STATUSES:
             buckets[key]["replies"] += count
 
+    # LinkedIn DMs are sent manually (copy/paste) — replies happen on LinkedIn,
+    # outside the system, so only the sent count is observable (na like portal).
+    dm_sent = (
+        session.query(func.count(Recruiter.id))
+        .filter(Recruiter.user_id == user_id, Recruiter.dm_sent_at.isnot(None))
+        .scalar()
+        or 0
+    )
+    buckets["linkedin_dm"] = {"key": "linkedin_dm", "sent": dm_sent, "replies": 0}
+
     channels = []
-    for key in ("poster", "recruiter_email", "portal"):
+    for key in ("poster", "recruiter_email", "linkedin_dm", "portal"):
         b = buckets[key]
-        na = key == "portal"
+        na = key in ("portal", "linkedin_dm")
         rate = None
         if not na and b["sent"] > 0:
             rate = round(b["replies"] * 100 / b["sent"])
@@ -459,6 +469,9 @@ def _serialize_recruiter(rec: Recruiter | None) -> dict | None:
         "found_at": rec.found_at.isoformat() if rec.found_at else None,
         "draft_subject": rec.draft_subject,
         "draft_body": rec.draft_body,
+        "dm_invite_note": rec.dm_invite_note,
+        "dm_message": rec.dm_message,
+        "dm_sent_at": rec.dm_sent_at.isoformat()[:10] if rec.dm_sent_at else None,
     }
 
 
@@ -622,6 +635,76 @@ async def draft_recruiter_email(
             rec.draft_subject = subject
             rec.draft_body = body
         job = session.get(Job, job_id)
+        ctx = _recruiter_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
+@router.post("/jobs/{job_id}/draft-linkedin-dm", response_class=HTMLResponse)
+async def draft_linkedin_dm_route(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Generate (or regenerate) a LinkedIn DM draft (invite note + message).
+
+    Sending stays manual: the user copies the texts into LinkedIn themselves.
+    """
+    from src.analysis.recruiter_finder import _build_llm_client
+    from src.api.user_settings import get_settings_for_user
+    from src.communications.outreach_writer import draft_linkedin_dm
+    from src.config.profile import get_profile_for_user
+
+    with get_session() as session:
+        job, recruiter = _load_job_with_recruiter(session, job_id, current_user.id)
+        job_title, job_description = job.title, job.description
+        company_name = job.company.name
+        recruiter_id = recruiter.id
+        recruiter_name, recruiter_title = recruiter.name, recruiter.title
+
+    user_cfg = get_settings_for_user(current_user)
+    client = _build_llm_client(user_cfg)
+    if client is None:
+        raise HTTPException(
+            status_code=422,
+            detail="LLM provider not configured — set your API key in Settings",
+        )
+    profile = get_profile_for_user(current_user)
+
+    try:
+        invite_note, message = await draft_linkedin_dm(
+            job_title, job_description, company_name,
+            recruiter_name, recruiter_title, profile, client,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    with get_session() as session:
+        rec = session.get(Recruiter, recruiter_id)
+        if rec is not None:
+            rec.dm_invite_note = invite_note
+            rec.dm_message = message
+        job = session.get(Job, job_id)
+        ctx = _recruiter_section_context(session, job, current_user)
+
+    ctx["t"] = get_t(current_user)
+    return templates.TemplateResponse(request, "partials/_recruiter_section.html", ctx)
+
+
+@router.post("/jobs/{job_id}/mark-dm-sent", response_class=HTMLResponse)
+def mark_dm_sent(
+    request: Request,
+    job_id: int,
+    current_user: User = Depends(require_user_redirect),
+) -> HTMLResponse:
+    """Record that the user sent the LinkedIn DM manually (outcome tracking)."""
+    from datetime import timezone as _tz
+
+    with get_session() as session:
+        job, recruiter = _load_job_with_recruiter(session, job_id, current_user.id)
+        rec = session.get(Recruiter, recruiter.id)
+        rec.dm_sent_at = datetime.now(_tz.utc)
         ctx = _recruiter_section_context(session, job, current_user)
 
     ctx["t"] = get_t(current_user)

@@ -62,3 +62,63 @@ async def draft_outreach(
         logger.warning("Unparseable outreach draft: %r", text[:200])
         raise ValueError("Could not generate a valid email draft — try again")
     return str(data["subject"]).strip(), str(data["body"]).strip()
+
+
+_DM_SYSTEM_MESSAGE = (
+    "You write LinkedIn outreach for a job candidate contacting a recruiter about "
+    "a specific job posting. The candidate sends these manually from their own "
+    "LinkedIn account. Write in the same language as the job description "
+    "(French job → French message). No flattery, no buzzwords, no emoji.\n\n"
+    "Produce TWO texts:\n"
+    "1. invite_note — the note attached to a connection request. HARD LIMIT "
+    "280 characters. One concrete hook linking the candidate to the role, then "
+    "a low-pressure ask.\n"
+    "2. message — the direct message sent once connected (or as InMail). Max "
+    "600 characters. 2-3 concrete matches between profile and role, mention the "
+    "candidate applied via the official posting, end with a simple question.\n\n"
+    "Return ONLY valid JSON with this exact schema:\n"
+    "{\n"
+    '  "invite_note": "<connection request note, max 280 chars>",\n'
+    '  "message": "<direct message, max 600 chars>"\n'
+    "}\n"
+    "Do not include any text outside the JSON object."
+)
+
+_DM_INVITE_HARD_LIMIT = 300  # LinkedIn truncates connection notes at 300 chars
+
+
+async def draft_linkedin_dm(
+    job_title: str,
+    job_description: str | None,
+    company_name: str,
+    recruiter_name: str,
+    recruiter_title: str | None,
+    profile: dict,
+    client: LLMClient,
+) -> tuple[str, str]:
+    """Return (invite_note, message) for a semi-manual LinkedIn DM.
+
+    Raises ValueError when the LLM response cannot be parsed.
+    """
+    candidate = profile.get("candidate", {}) or {}
+    candidate_summary = "\n".join(
+        f"- {k}: {v}"
+        for k, v in candidate.items()
+        if v and isinstance(v, (str, int, float))
+    )
+    description = (job_description or "")[:_MAX_DESCRIPTION_CHARS]
+
+    prompt = (
+        f"Job: {job_title} at {company_name}\n"
+        f"Recruiter: {recruiter_name}"
+        + (f" ({recruiter_title})" if recruiter_title else "")
+        + f"\n\nCandidate profile:\n{candidate_summary or '- (no profile data)'}\n\n"
+        f"Job description:\n{description or '(none)'}"
+    )
+    text = await client.complete(prompt=prompt, max_tokens=1024, system=_DM_SYSTEM_MESSAGE)
+    data = _parse_json_response(text)
+    if not data or not data.get("invite_note") or not data.get("message"):
+        logger.warning("Unparseable LinkedIn DM draft: %r", text[:200])
+        raise ValueError("Could not generate a valid LinkedIn DM draft — try again")
+    invite_note = str(data["invite_note"]).strip()[:_DM_INVITE_HARD_LIMIT]
+    return invite_note, str(data["message"]).strip()

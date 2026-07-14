@@ -200,6 +200,10 @@ class Recruiter(Base):
     found_at = Column(DateTime, nullable=True)
     draft_subject = Column(Text, nullable=True)
     draft_body = Column(Text, nullable=True)
+    # Semi-manual LinkedIn DM outreach (copy/paste — never automated sending)
+    dm_invite_note = Column(Text, nullable=True)        # connection note, ≤300 chars
+    dm_message = Column(Text, nullable=True)            # full DM once connected / InMail
+    dm_sent_at = Column(DateTime, nullable=True)        # user marked the DM as sent
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = relationship("Company", back_populates="recruiters")
