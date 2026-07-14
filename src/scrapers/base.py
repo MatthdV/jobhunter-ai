@@ -160,14 +160,17 @@ class BaseScraper(ABC):
         # Timestamp — never use deprecated utcnow()
         job.scraped_at = datetime.now(UTC)  # type: ignore[assignment]
 
-        # is_remote detection
-        haystack = " ".join(
-            filter(
-                None,
-                [str(job.title or ""), str(job.location or ""), str(job.description or "")],
-            )
-        ).lower()
-        job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)  # type: ignore[assignment]
+        # is_remote detection — trust the scraper's structured detection when it
+        # set a value (LinkedIn criteria, WTTJ remote field, Adzuna…); the crude
+        # keyword heuristic is only a fallback for scrapers that don't set it.
+        if job.is_remote is None:
+            haystack = " ".join(
+                filter(
+                    None,
+                    [str(job.title or ""), str(job.location or ""), str(job.description or "")],
+                )
+            ).lower()
+            job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)  # type: ignore[assignment]
 
         # Salary parsing — only when not already set (WTTJ provides structured values)
         if job.salary_min is None and job.salary_max is None and job.salary_raw:
@@ -185,6 +188,11 @@ class BaseScraper(ABC):
         for keyword in effective_filters.excluded_keywords:
             if keyword.lower() in search_text:
                 return None
+
+        # Work-mode post-filter: board APIs are loose (LinkedIn returns hybrid
+        # and on-site jobs despite f_WT=2) — enforce remote-only after parsing.
+        if effective_filters.remote_only and not job.is_remote:
+            return None
 
         return job
 

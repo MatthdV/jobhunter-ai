@@ -252,8 +252,25 @@ class TestNormalize:
         assert result.is_remote is True
 
     def test_is_remote_false_when_not_mentioned(self) -> None:
+        # Permissive work modes: a non-remote job must survive but be flagged False
+        all_modes = ScraperFilters(work_modes=["remote", "hybrid", "on-site"])
         job = self._make_job(location="Paris", description="On-site position.")
-        result = self.scraper._normalize(job, self.filters)
+        result = self.scraper._normalize(job, all_modes)
+        assert result is not None
+        assert result.is_remote is False
+
+    def test_remote_only_filter_drops_non_remote_job(self) -> None:
+        # Default filters are remote-only: non-remote jobs are dropped post-parse
+        job = self._make_job(location="Paris", description="On-site position.")
+        assert self.scraper._normalize(job, self.filters) is None
+
+    def test_scraper_set_is_remote_is_not_overwritten(self) -> None:
+        # A scraper's structured detection wins over the keyword heuristic:
+        # description mentions "remote" but the scraper said non-remote
+        all_modes = ScraperFilters(work_modes=["remote", "hybrid", "on-site"])
+        job = self._make_job(description="No remote possible.", location="Paris",
+                             is_remote=False)
+        result = self.scraper._normalize(job, all_modes)
         assert result is not None
         assert result.is_remote is False
 

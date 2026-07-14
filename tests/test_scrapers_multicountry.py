@@ -65,6 +65,7 @@ class TestBaseScraperCountry:
             salary_max=120_000,
             country_code="US",
             salary_currency="USD",
+            is_remote=True,
         )
         result = scraper._normalize(job, ScraperFilters())
         assert result is not None

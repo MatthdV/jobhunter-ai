@@ -298,7 +298,8 @@ class WTTJScraper(BaseScraper):
             # --- Remote ---
             remote_val = raw.get("remote")
             if isinstance(remote_val, str):
-                is_remote = remote_val == "full"
+                # WTTJ API values: "fulltime" (full remote), "partial", "punctual", "no"
+                is_remote = remote_val in ("full", "fulltime")
             elif isinstance(remote_val, bool):
                 is_remote = remote_val
             else:
