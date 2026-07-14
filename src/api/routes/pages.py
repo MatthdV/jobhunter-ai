@@ -1062,7 +1062,15 @@ def _build_gmail_flow(redirect_uri: str):
             "token_uri": "https://oauth2.googleapis.com/token",
         }
     }
-    return Flow.from_client_config(client_config, scopes=_GMAIL_SCOPES, redirect_uri=redirect_uri)
+    # PKCE's code_verifier can't survive across the connect/callback request
+    # boundary (each builds a fresh Flow instance) — this client is
+    # confidential (holds a client_secret), so PKCE isn't needed anyway.
+    return Flow.from_client_config(
+        client_config,
+        scopes=_GMAIL_SCOPES,
+        redirect_uri=redirect_uri,
+        autogenerate_code_verifier=False,
+    )
 
 
 def _gmail_profile_email(credentials) -> str:
