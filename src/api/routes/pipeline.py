@@ -73,18 +73,44 @@ _DEFAULT_JOB_SOURCES: list[dict] = [
 ]
 
 
+def _merge_search_defaults(sources: list[dict], defaults: dict) -> list[dict]:
+    """Fill empty per-source search fields from the global search_defaults.
+
+    A source with its own search_terms/location/work_modes keeps them
+    (per-source override); an empty field inherits the global value.
+    """
+    if not defaults:
+        return sources
+    merged = []
+    for src in sources:
+        s = dict(src)
+        if not s.get("search_terms"):
+            s["search_terms"] = list(defaults.get("search_terms", []))
+        if not s.get("location"):
+            s["location"] = defaults.get("location", "")
+        if not s.get("work_modes"):
+            s["work_modes"] = list(defaults.get("work_modes", []) or ["remote"])
+        merged.append(s)
+    return merged
+
+
 def _load_job_sources_for_user(user: User) -> list[dict]:
     """Read enabled job_sources from the user's profile.
 
-    Falls back to *_DEFAULT_JOB_SOURCES* when the profile is empty or
+    Global search_defaults (keywords/location/work_modes entered once for
+    all sources) are merged into every source that has no override of its
+    own. Falls back to *_DEFAULT_JOB_SOURCES* when the profile is empty or
     has no job_sources section, so the scan phase never hard-aborts for
     users who haven't configured their sources yet.
     """
     try:
         profile = get_profile_for_user(user)
+        defaults = profile.get("search_defaults", {}) or {}
         sources = [s for s in profile.get("job_sources", []) if s.get("enabled", True)]
         if sources:
-            return sources
+            return _merge_search_defaults(sources, defaults)
+        if defaults.get("search_terms"):
+            return _merge_search_defaults(list(_DEFAULT_JOB_SOURCES), defaults)
     except Exception as exc:
         logger.warning("Could not load job_sources for user %d: %s", user.id, exc)
     return _DEFAULT_JOB_SOURCES
@@ -570,6 +596,8 @@ async def _run_respond(user_id: int) -> None:
                 draft = await responder.handle(msg, app)
                 if draft is not None:
                     app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
+                    if app.job is not None:
+                        app.job.status = JobStatus.REPLIED  # type: ignore[assignment]
             await email_handler.mark_as_read(msg.message_id)
             handled += 1
 

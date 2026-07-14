@@ -498,6 +498,8 @@ class JobScheduler:
                 # (handle() returns None for scam/rejection/unrecognised intent)
                 if draft_response is not None:
                     app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
+                    if app.job is not None:
+                        app.job.status = JobStatus.REPLIED  # type: ignore[assignment]
                 if self._telegram:
                     job = app.job
                     await self._telegram.notify_reply_received(

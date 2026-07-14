@@ -78,7 +78,8 @@ def _onboarding_state(user: User) -> dict[str, bool]:
             or settings.openrouter_api_key
         )
 
-    sources_done = any(
+    defaults = profile.get("search_defaults", {}) or {}
+    sources_done = bool(defaults.get("search_terms")) or any(
         s.get("search_terms")
         for s in profile.get("job_sources", [])
         if s.get("enabled", True)
@@ -155,15 +156,18 @@ def _build_stats(user_id: int) -> dict:
             session.query(Job)
             .filter(
                 Job.user_id == user_id,
-                Job.status.in_([JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED]),
+                Job.status.in_(
+                    [JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED, JobStatus.REPLIED]
+                ),
             )
             .count()
         )
+        # "Applied" = ever submitted — a reply must not remove it from the funnel
         total_applied = (
             session.query(Application)
             .filter(
                 Application.user_id == user_id,
-                Application.status == ApplicationStatus.SUBMITTED,
+                Application.status.in_(_CHANNEL_BASE_STATUSES),
             )
             .count()
         )
@@ -187,7 +191,9 @@ def _build_stats(user_id: int) -> dict:
             .filter(
                 Job.user_id == user_id,
                 Job.scraped_at >= today_start,
-                Job.status.in_([JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED]),
+                Job.status.in_(
+                    [JobStatus.MATCHED, JobStatus.PENDING, JobStatus.APPLIED, JobStatus.REPLIED]
+                ),
             )
             .count()
         )
@@ -196,7 +202,7 @@ def _build_stats(user_id: int) -> dict:
             .filter(
                 Application.user_id == user_id,
                 Application.submitted_at >= today_start,
-                Application.status == ApplicationStatus.SUBMITTED,
+                Application.status.in_(_CHANNEL_BASE_STATUSES),
             )
             .count()
         )
@@ -1001,10 +1007,18 @@ def _build_settings_context(request: Request, current_user: User, extra: dict | 
                 "work_modes": src.get("work_modes", ["remote"]),
             }
 
+    raw_defaults = profile_data.get("search_defaults", {}) or {}
+    search_defaults = {
+        "keywords": raw_defaults.get("search_terms", []),
+        "location": raw_defaults.get("location", ""),
+        "work_modes": raw_defaults.get("work_modes", ["remote"]),
+    }
+
     ctx: dict = {
         "current_user": current_user,
         "profile_data": profile_data,
         "source_configs": source_configs,
+        "search_defaults": search_defaults,
         "stored_creds": get_credential_names(current_user),
         "global_creds": get_global_credential_names(),
         "t": get_t(current_user),

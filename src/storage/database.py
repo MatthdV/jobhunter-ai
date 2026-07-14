@@ -143,6 +143,23 @@ def _migrate_schema(engine: Engine) -> None:
             except Exception:
                 pass  # column already exists
 
+        # Data fix: jobs whose application got a reply were left at 'applied'
+        # before JobStatus.REPLIED existed — sync them once (idempotent).
+        try:
+            # SQLAlchemy Enum columns store member NAMES (uppercase)
+            res = conn.execute(text(
+                "UPDATE jobs SET status = 'REPLIED' "
+                "WHERE status = 'APPLIED' AND id IN ("
+                "  SELECT job_id FROM applications "
+                "  WHERE status IN ('REPLIED', 'INTERVIEW', 'OFFER')"
+                ")"
+            ))
+            conn.commit()
+            if res.rowcount:
+                logger.info("Migrated: %d jobs applied → replied", res.rowcount)
+        except Exception:
+            pass  # applications table may not exist yet on first init
+
 
 def init_db(database_url: str | None = None) -> None:
     """Create all tables declared in models.py if they don't already exist.

@@ -458,12 +458,11 @@ def update_source_config(
         existing = [entry]
 
     for s in existing:
-        if body.keywords:
-            s["search_terms"] = body.keywords
-        if body.location:
-            s["location"] = body.location
-        if body.work_modes:
-            s["work_modes"] = body.work_modes
+        # Always assign — an empty value clears the per-source override so the
+        # source falls back to the global search_defaults at scan time.
+        s["search_terms"] = body.keywords
+        s["location"] = body.location
+        s["work_modes"] = body.work_modes
 
     profile["job_sources"] = sources
     updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
@@ -475,6 +474,41 @@ def update_source_config(
         user.profile_yaml = updated_yaml  # type: ignore[assignment]
 
     return {"ok": True, "source": body.source}
+
+
+class SearchDefaultsIn(BaseModel):
+    keywords: list[str] = []
+    location: str = ""
+    work_modes: list[str] = []
+
+
+@router.put("/profile/search-defaults")
+def update_search_defaults(
+    body: SearchDefaultsIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Update the global search defaults shared by all sources.
+
+    Each source inherits these at scan time unless it defines its own
+    override in job_sources (empty override = inherit).
+    """
+    raw_yaml = current_user.profile_yaml or ""
+    profile: dict = yaml.safe_load(raw_yaml) or {} if raw_yaml.strip() else {}
+
+    profile["search_defaults"] = {
+        "search_terms": body.keywords,
+        "location": body.location,
+        "work_modes": [m for m in body.work_modes if m in ("remote", "hybrid", "on-site")],
+    }
+    updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
+
+    with get_session() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.profile_yaml = updated_yaml  # type: ignore[assignment]
+
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

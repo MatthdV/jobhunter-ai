@@ -36,6 +36,7 @@ class JobStatus(StrEnum):
     SKIPPED = "skipped"       # Score too low or manually dismissed
     PENDING = "pending"       # Human approved, CV/letter being generated
     APPLIED = "applied"       # Application submitted
+    REPLIED = "replied"       # Recruiter replied to the application
     REJECTED = "rejected"     # Recruiter replied with rejection
 
 

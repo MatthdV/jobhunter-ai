@@ -334,7 +334,7 @@ def respond() -> None:
     from src.communications.recruiter_responder import RecruiterResponder
     from src.config.settings import settings
     from src.storage.database import get_session
-    from src.storage.models import Application, ApplicationStatus
+    from src.storage.models import Application, ApplicationStatus, JobStatus
 
     console.print("[bold]Responding[/bold] — polling Gmail for recruiter replies…")
 
@@ -380,6 +380,8 @@ def respond() -> None:
                     draft = await responder.handle(msg, app)
                     if draft is not None:
                         app.status = ApplicationStatus.REPLIED  # type: ignore[assignment]
+                        if app.job is not None:
+                            app.job.status = JobStatus.REPLIED  # type: ignore[assignment]
                     if telegram:
                         job = app.job
                         await telegram.notify_reply_received(

@@ -219,6 +219,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "hint_max_age": "Indeed et LinkedIn filtrent via l'API. WTTJ filtre en post-traitement si le champ date est disponible.",
 
         # Source config labels
+        "defaults_title": "Recherche globale — toutes les sources",
+        "defaults_subtitle": "Saisis tes mots-clés une seule fois : chaque source les utilise, sauf si tu la personnalises ci-dessous.",
+        "lbl_inherit_hint": "Vide = hérite de la recherche globale ci-dessus.",
         "lbl_search_kw": "Mots-clés de recherche",
         "ph_add_kw": "Ajouter un mot-clé…",
         "lbl_work_modes": "Modes de travail",
@@ -461,6 +464,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "hint_max_age": "Indeed and LinkedIn filter via API. WTTJ filters in post-processing if the date field is available.",
 
         # Source config labels
+        "defaults_title": "Global search — all sources",
+        "defaults_subtitle": "Enter your keywords once: every source uses them unless you customise it below.",
+        "lbl_inherit_hint": "Empty = inherits the global search above.",
         "lbl_search_kw": "Search keywords",
         "ph_add_kw": "Add a keyword…",
         "lbl_work_modes": "Work modes",
@@ -703,6 +709,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "hint_max_age": "Indeed y LinkedIn filtran por API. WTTJ filtra en post-procesamiento si el campo fecha está disponible.",
 
         # Source config labels
+        "defaults_title": "Búsqueda global — todas las fuentes",
+        "defaults_subtitle": "Introduce tus palabras clave una sola vez: cada fuente las usa salvo que la personalices abajo.",
+        "lbl_inherit_hint": "Vacío = hereda la búsqueda global de arriba.",
         "lbl_search_kw": "Palabras clave de búsqueda",
         "ph_add_kw": "Añadir una palabra clave…",
         "lbl_work_modes": "Modos de trabajo",

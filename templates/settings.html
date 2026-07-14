@@ -219,14 +219,70 @@
       <h2 class="text-base font-semibold text-gray-800">{{ t.sources_title if t else "Sources actives" }}</h2>
       <p class="text-xs text-gray-400 mt-0.5">{{ t.sources_subtitle if t else "Activez une source puis configurez vos mots-clés et localisation." }}</p>
     </div>
-    <div class="px-6 py-3 space-y-0" id="sources-section">
+    {# Work mode label lookup (used in the defaults block and both source loops) #}
+    {% set wm_labels = {
+        'remote':  t.work_mode_remote  if t else 'Remote',
+        'hybrid':  t.work_mode_hybrid  if t else 'Hybride',
+        'on-site': t.work_mode_onsite  if t else 'Présentiel'
+    } %}
 
-      {# Work mode label lookup (used in both source loops below) #}
-      {% set wm_labels = {
-          'remote':  t.work_mode_remote  if t else 'Remote',
-          'hybrid':  t.work_mode_hybrid  if t else 'Hybride',
-          'on-site': t.work_mode_onsite  if t else 'Présentiel'
-      } %}
+    {# --- Recherche globale : saisie unique, héritée par toutes les sources --- #}
+    {% set sd = search_defaults or {} %}
+    <div class="px-6 py-4 border-b border-gray-100 bg-indigo-50/50">
+      <p class="text-sm font-medium text-gray-800">{{ t.defaults_title if t else "Recherche globale — toutes les sources" }}</p>
+      <p class="text-xs text-gray-400 mb-3">{{ t.defaults_subtitle if t else "Saisis tes mots-clés une seule fois : chaque source les utilise, sauf si tu la personnalises ci-dessous." }}</p>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_search_kw if t else "Mots-clés de recherche" }}</label>
+        <div class="flex flex-wrap gap-1.5 p-2 rounded-lg border border-gray-300 min-h-[42px] bg-white
+                    focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500"
+             id="tags-kw-defaults-container" data-src="defaults">
+          {% for kw in sd.get('keywords', []) %}
+          <span class="tag-pill" data-val="{{ kw | e }}">
+            {{ kw | e }}<button type="button" onclick="removeTag(this)" class="ml-1 text-gray-400 hover:text-red-500">×</button>
+          </span>
+          {% endfor %}
+          <input type="text"
+                 id="tags-kw-defaults-input"
+                 placeholder="{{ t.ph_add_kw if t else 'Ajouter un mot-clé…' }}"
+                 onkeydown="handleSourceTagKey(event,'defaults')"
+                 class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.location_label if t else "Localisation" }}</label>
+          <input type="text"
+                 id="loc-defaults"
+                 value="{{ sd.get('location', '') | e }}"
+                 placeholder="ex: Paris, France — ou pays si remote"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                        focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">{{ t.lbl_work_modes if t else "Modes de travail" }}</label>
+          <div class="flex gap-3 mt-2">
+            {% for mode in ['remote', 'hybrid', 'on-site'] %}
+            <label class="flex items-center gap-1 text-xs text-gray-700 cursor-pointer">
+              <input type="checkbox"
+                     class="work-mode-defaults rounded border-gray-300 text-indigo-600"
+                     value="{{ mode }}"
+                     {% if mode in sd.get('work_modes', ['remote']) %}checked{% endif %}>
+              {{ wm_labels[mode] }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="flex justify-end mt-3">
+        <button onclick="saveSearchDefaults()"
+                class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg
+                       hover:bg-indigo-700 transition-colors">
+          {{ t.btn_save if t else "Sauvegarder" }}
+        </button>
+      </div>
+    </div>
+
+    <div class="px-6 py-3 space-y-0" id="sources-section">
 
       {# --- Sources Playwright (credentials utilisateur) --- #}
       {% for src_name, src_label, src_desc in [
@@ -269,6 +325,7 @@
                      onkeydown="handleSourceTagKey(event,'{{ src_name }}')"
                      class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
             </div>
+            <p class="text-[11px] text-gray-400 mt-1">{{ t.lbl_inherit_hint if t else "Vide = hérite de la recherche globale ci-dessus." }}</p>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -360,6 +417,7 @@
                      onkeydown="handleSourceTagKey(event,'{{ src_name }}')"
                      class="flex-1 min-w-[120px] text-sm outline-none bg-transparent py-0.5">
             </div>
+            <p class="text-[11px] text-gray-400 mt-1">{{ t.lbl_inherit_hint if t else "Vide = hérite de la recherche globale ci-dessus." }}</p>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -677,6 +735,31 @@
       } else {
         const err = await res.json().catch(() => ({}));
         showToast('Erreur : ' + (err.detail || 'inconnue'), 'error');
+      }
+    } catch (_) {
+      showToast('Erreur réseau', 'error');
+    }
+  }
+
+  // ────────────────────────────────────────────────────────
+  // Global search defaults save (inherited by every source)
+  // ────────────────────────────────────────────────────────
+  async function saveSearchDefaults() {
+    const keywords = getTagValues('tags-kw-defaults-container');
+    const location = document.getElementById('loc-defaults').value.trim();
+    const work_modes = Array.from(
+      document.querySelectorAll('.work-mode-defaults:checked')
+    ).map(c => c.value);
+    try {
+      const res = await fetch('/api/profile/search-defaults', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords, location, work_modes }),
+      });
+      if (res.ok) {
+        showToast('Recherche globale sauvegardée', 'success');
+      } else {
+        showToast('Erreur lors de la sauvegarde', 'error');
       }
     } catch (_) {
       showToast('Erreur réseau', 'error');
