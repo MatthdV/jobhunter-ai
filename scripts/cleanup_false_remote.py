@@ -53,7 +53,17 @@ FULL_REMOTE_MARKERS = (
 
 
 def find_db() -> Path:
-    for candidate in (Path("/app/data/jobhunter.db"), Path("jobhunter.db"), Path("data/jobhunter.db")):
+    candidates = [
+        Path("/data/db/jobhunter.db"),  # VPS docker volume
+        Path("/app/data/jobhunter.db"),
+        Path("jobhunter.db"),
+        Path("data/jobhunter.db"),
+    ]
+    # Fallback: any .db file in the docker volume mount
+    db_dir = Path("/data/db")
+    if db_dir.is_dir():
+        candidates.extend(sorted(db_dir.glob("*.db")))
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     sys.exit("jobhunter.db not found")
