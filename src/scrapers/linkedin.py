@@ -224,11 +224,19 @@ class LinkedInScraper(BaseScraper):
                 val = val_el.get_text(strip=True)
                 if "employment type" in hdr or "type de contrat" in hdr:
                     contract_type = val
-                if "remote" in val.lower() or "télétravail" in val.lower():
+                # "Télétravail partiel" / "Hybrid" = hybrid, not remote —
+                # only flag when the value has no partial/on-site marker.
+                val_l = val.lower()
+                if ("remote" in val_l or "télétravail" in val_l) and not any(
+                    marker in val_l
+                    for marker in ("partiel", "hybrid", "hybride", "sur site", "on-site")
+                ):
                     is_remote = True
 
-            if location_str and "remote" in location_str.lower():
-                is_remote = True
+            if location_str:
+                loc_l = location_str.lower()
+                if "remote" in loc_l and "hybrid" not in loc_l:
+                    is_remote = True
             if description and any(
                 kw in description.lower()
                 for kw in ("full remote", "fully remote", "100% remote", "télétravail complet")

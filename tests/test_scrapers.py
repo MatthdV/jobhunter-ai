@@ -251,6 +251,25 @@ class TestNormalize:
         assert result is not None
         assert result.is_remote is True
 
+    def test_hybrid_marker_vetoes_remote_heuristic(self) -> None:
+        # "télétravail hybride (2j/semaine)" must NOT be flagged remote
+        # (regression: LinkedIn job 4434506663, Ippon)
+        all_modes = ScraperFilters(work_modes=["remote", "hybrid", "on-site"])
+        job = self._make_job(
+            location="Bordeaux",
+            description="Projets à impact et télétravail hybride (2j/semaine).",
+        )
+        result = self.scraper._normalize(job, all_modes)
+        assert result is not None
+        assert result.is_remote is False
+
+    def test_hybrid_job_dropped_by_remote_only_filter(self) -> None:
+        job = self._make_job(
+            location="Paris",
+            description="Hybrid remote: 2 days in the office.",
+        )
+        assert self.scraper._normalize(job, self.filters) is None
+
     def test_is_remote_false_when_not_mentioned(self) -> None:
         # Permissive work modes: a non-remote job must survive but be flagged False
         all_modes = ScraperFilters(work_modes=["remote", "hybrid", "on-site"])

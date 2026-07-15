@@ -18,6 +18,24 @@ WORKING_DAYS_PER_YEAR: int = 220
 
 _REMOTE_KEYWORDS = ("remote", "télétravail", "distanciel")
 
+# Hybrid/on-site markers veto the keyword heuristic: "télétravail hybride
+# (2j/semaine)" or "no remote" would otherwise match _REMOTE_KEYWORDS.
+_HYBRID_KEYWORDS = (
+    "hybrid",
+    "hybride",
+    "télétravail partiel",
+    "télétravail hybride",
+    "partial remote",
+    "partially remote",
+    "no remote",
+    "not remote",
+    "pas de télétravail",
+    "pas de remote",
+    "on-site",
+    "sur site",
+    "présentiel",
+)
+
 # Process-wide gate limiting how many Playwright browsers run at once.
 # The web app runs a single uvicorn worker, so one module-level semaphore is
 # shared across all users' concurrent scans. HTTP-only scrapers bypass it.
@@ -170,7 +188,10 @@ class BaseScraper(ABC):
                     [str(job.title or ""), str(job.location or ""), str(job.description or "")],
                 )
             ).lower()
-            job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)  # type: ignore[assignment]
+            if any(kw in haystack for kw in _HYBRID_KEYWORDS):
+                job.is_remote = False  # type: ignore[assignment]
+            else:
+                job.is_remote = any(kw in haystack for kw in _REMOTE_KEYWORDS)  # type: ignore[assignment]
 
         # Salary parsing — only when not already set (WTTJ provides structured values)
         if job.salary_min is None and job.salary_max is None and job.salary_raw:
