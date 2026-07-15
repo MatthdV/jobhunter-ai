@@ -133,9 +133,16 @@ class LinkedInScraper(BaseScraper):
                 "count": str(min(page_size, limit - len(job_ids))),
                 "f_WT": _WORK_TYPE.get(work_mode, "2"),
             }
-            if geo_id:
+            # LinkedIn IGNORES `location` when `geoId` is present, so the two
+            # must never be sent together (geoId France + "Madrid" would return
+            # jobs from all of France). Hybrid/on-site searches use the city —
+            # more specific; remote searches use the country geoId — a remote
+            # job doesn't have to be posted in the user's city.
+            if work_mode != "remote" and location and location.lower() != "remote":
+                params["location"] = location
+            elif geo_id:
                 params["geoId"] = geo_id
-            elif location:
+            elif location and location.lower() != "remote":
                 params["location"] = location
             if filters.max_days_old:
                 params["f_TPR"] = f"r{filters.max_days_old * 86400}"

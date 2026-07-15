@@ -298,6 +298,7 @@ class TestNormalize:
         result = self.scraper._normalize(job, self.filters)
         assert result is None
 
+
     def test_excluded_keyword_in_description_returns_none(self) -> None:
         job = self._make_job(description="This is a stage position.")
         result = self.scraper._normalize(job, self.filters)
@@ -327,6 +328,79 @@ class TestNormalize:
         job = self._make_job()
         result = self.scraper._normalize(job, filters=None)
         assert result is not None
+
+
+class TestLocationPostFilter:
+    """Boards return jobs outside the requested area (Madrid search → Bordeaux).
+
+    Non-remote jobs must match filters.location; remote jobs always pass.
+    """
+
+    def setup_method(self) -> None:
+        self.scraper = _ConcreteScraper()
+
+    def _make_job(self, **kwargs: object) -> Job:
+        defaults: dict[str, object] = {
+            "title": "Automation Engineer",
+            "url": "https://example.com/job/1",
+            "source": "test",
+            "description": "Industrial automation role.",
+            "location": "Madrid, Community of Madrid, Spain",
+            "is_remote": False,
+        }
+        defaults.update(kwargs)
+        return Job(**defaults)  # type: ignore[arg-type]
+
+    def _filters(self, location: str = "Madrid") -> ScraperFilters:
+        return ScraperFilters(
+            work_modes=["remote", "hybrid", "on-site"], location=location
+        )
+
+    def test_matching_city_passes(self) -> None:
+        job = self._make_job()
+        assert self.scraper._normalize(job, self._filters()) is not None
+
+    def test_wrong_city_dropped(self) -> None:
+        # Regression: Madrid search returned Bordeaux jobs
+        job = self._make_job(location="Bordeaux, Nouvelle-Aquitaine, France")
+        assert self.scraper._normalize(job, self._filters()) is None
+
+    def test_metro_area_variant_passes(self) -> None:
+        job = self._make_job(location="Greater Madrid Metropolitan Area")
+        assert self.scraper._normalize(job, self._filters()) is not None
+
+    def test_suburb_in_same_community_passes(self) -> None:
+        job = self._make_job(location="Alcobendas, Community of Madrid, Spain")
+        assert self.scraper._normalize(job, self._filters()) is not None
+
+    def test_accents_are_ignored(self) -> None:
+        job = self._make_job(location="Madrid, Communauté de Madrid, Espagne")
+        assert self.scraper._normalize(job, self._filters("Madrid")) is not None
+        job2 = self._make_job(location="Orléans, France")
+        assert self.scraper._normalize(job2, self._filters("Orleans")) is not None
+
+    def test_remote_job_passes_regardless_of_location(self) -> None:
+        job = self._make_job(location="Barcelona, Spain", is_remote=True)
+        assert self.scraper._normalize(job, self._filters()) is not None
+
+    def test_missing_location_dropped_when_filter_set(self) -> None:
+        # Can't verify → drop, same strictness as the remote post-filter
+        job = self._make_job(location=None)
+        assert self.scraper._normalize(job, self._filters()) is None
+
+    def test_no_location_filter_keeps_everything(self) -> None:
+        job = self._make_job(location="Bordeaux, France")
+        assert self.scraper._normalize(job, self._filters("")) is not None
+
+    def test_location_remote_sentinel_disables_filter(self) -> None:
+        # Default ScraperFilters.location == "remote" must not geo-filter
+        job = self._make_job(location="Bordeaux, France")
+        assert self.scraper._normalize(job, self._filters("remote")) is not None
+
+    def test_city_with_country_suffix_matches(self) -> None:
+        # User typed "Madrid, Spain" — only the city token is matched
+        job = self._make_job(location="Madrid et périphérie")
+        assert self.scraper._normalize(job, self._filters("Madrid, Spain")) is not None
 
 
 # ---------------------------------------------------------------------------

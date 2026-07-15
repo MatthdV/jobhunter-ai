@@ -480,6 +480,7 @@ class SearchDefaultsIn(BaseModel):
     keywords: list[str] = []
     location: str = ""
     work_modes: list[str] = []
+    countries: list[str] = []
 
 
 @router.put("/profile/search-defaults")
@@ -499,6 +500,9 @@ def update_search_defaults(
         "search_terms": body.keywords,
         "location": body.location,
         "work_modes": [m for m in body.work_modes if m in ("remote", "hybrid", "on-site")],
+        "countries": [
+            c.strip().upper() for c in body.countries if len(c.strip()) == 2
+        ],
     }
     updated_yaml = yaml.dump(profile, allow_unicode=True, sort_keys=False)
 

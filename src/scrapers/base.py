@@ -18,6 +18,31 @@ WORKING_DAYS_PER_YEAR: int = 220
 
 _REMOTE_KEYWORDS = ("remote", "télétravail", "distanciel")
 
+
+def _strip_accents(text: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
+    )
+
+
+def location_matches(requested: str, job_location: str | None) -> bool:
+    """True when *job_location* plausibly belongs to the *requested* area.
+
+    Accent-insensitive substring check on the city token (text before the
+    first comma): "Madrid" matches "Madrid, Community of Madrid, Spain",
+    "Greater Madrid Metropolitan Area" and "Alcobendas, Community of Madrid".
+    A job with no location can't be verified — treated as a mismatch, same
+    spirit as the strict remote post-filter.
+    """
+    if not job_location:
+        return False
+    city = requested.split(",")[0].strip()
+    if not city:
+        return True
+    return _strip_accents(city).lower() in _strip_accents(job_location).lower()
+
 # Hybrid/on-site markers veto the keyword heuristic: "télétravail hybride
 # (2j/semaine)" or "no remote" would otherwise match _REMOTE_KEYWORDS.
 _HYBRID_KEYWORDS = (
@@ -111,10 +136,24 @@ class BaseScraper(ABC):
 
         config = get_country_config(country_code)
 
+        import logging
+
+        from src.scrapers.exceptions import RateLimitError
+
+        logger = logging.getLogger(self.__class__.__name__)
+
         for raw in raw_items:
             if len(results) >= limit:
                 break
-            job = await self._parse_raw(raw)
+            try:
+                job = await self._parse_raw(raw)
+            except RateLimitError:
+                raise  # the whole source is throttled — let retry logic handle it
+            except Exception as exc:
+                # One expired/unparseable posting must not kill the whole
+                # batch (LinkedIn details 404, JSearch details 500 mid-scan).
+                logger.warning("Skipping unparseable item: %s", exc)
+                continue
             # Set country metadata
             job.country_code = country_code  # type: ignore[assignment]
             if config:
@@ -213,6 +252,18 @@ class BaseScraper(ABC):
         # Work-mode post-filter: board APIs are loose (LinkedIn returns hybrid
         # and on-site jobs despite f_WT=2) — enforce remote-only after parsing.
         if effective_filters.remote_only and not job.is_remote:
+            return None
+
+        # Location post-filter: board APIs are just as loose about geography —
+        # a Madrid search can return Bordeaux. Non-remote jobs must match the
+        # requested location; remote jobs are location-independent and pass.
+        requested_loc = (effective_filters.location or "").strip()
+        if (
+            requested_loc
+            and requested_loc.lower() != "remote"
+            and not job.is_remote
+            and not location_matches(requested_loc, job.location)
+        ):
             return None
 
         return job

@@ -90,6 +90,10 @@ def _merge_search_defaults(sources: list[dict], defaults: dict) -> list[dict]:
             s["location"] = defaults.get("location", "")
         if not s.get("work_modes"):
             s["work_modes"] = list(defaults.get("work_modes", []) or ["remote"])
+        if not s.get("countries") or s.get("countries") == ["FR"]:
+            # ["FR"] is the legacy hard-coded default, never a deliberate
+            # per-source choice (the UI writes countries globally) — inherit.
+            s["countries"] = list(defaults.get("countries", []) or s.get("countries") or ["FR"])
         merged.append(s)
     return merged
 
@@ -265,11 +269,12 @@ async def _run_scan(user_id: int) -> None:
 
             from src.scrapers.filters import ScraperFilters
             max_days_old = user.max_days_old if hasattr(user, "max_days_old") else 30
-            for work_mode in work_modes:
+            from itertools import product
+            for work_mode, country in product(work_modes, countries or ["FR"]):
                 sources_attempted += 1
                 mode_filters = ScraperFilters(
                     work_modes=[work_mode],
-                    countries=countries,
+                    countries=[country],
                     location=location,
                     max_days_old=max_days_old,
                 )
@@ -281,6 +286,7 @@ async def _run_scan(user_id: int) -> None:
                             filters=mode_filters,
                             limit=50,
                             seen_urls=existing_urls,
+                            country_code=country,
                         )
                     fresh = [j for j in jobs if j.url not in existing_urls]
                     if fresh:
@@ -297,8 +303,11 @@ async def _run_scan(user_id: int) -> None:
                                 existing_urls.add(job.url)
                         new_count += len(fresh)
                 except Exception as exc:
-                    logger.exception("Scraper %r mode=%r raised an error", source_key, work_mode)
-                    source_errors.append(f"{source_key} ({work_mode}): {exc}")
+                    logger.exception(
+                        "Scraper %r mode=%r country=%r raised an error",
+                        source_key, work_mode, country,
+                    )
+                    source_errors.append(f"{source_key} ({work_mode}/{country}): {exc}")
 
         if sources_attempted > 0 and len(source_errors) == sources_attempted:
             first = source_errors[0] if source_errors else "unknown"

@@ -105,6 +105,10 @@ class FranceTravailScraper(BaseScraper):
         limit: int,
         country_code: str = "FR",
     ) -> list[Any]:
+        if country_code.upper() != "FR":
+            logger.warning("France Travail only supports FR, skipping country=%s", country_code)
+            return []
+
         assert self._client is not None, "_setup() must be called first"
 
         query = " ".join(keywords)
