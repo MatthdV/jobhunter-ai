@@ -241,7 +241,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "work_mode_remote": "Remote",
         "work_mode_hybrid": "Hybride",
         "work_mode_onsite": "Présentiel",
-        "lbl_railway_key": "Clé Railway",
+        "lbl_railway_key": "Clé serveur",
         "lbl_key_missing": "Clé manquante",
         "lbl_api_key_missing_server": "Clé API manquante côté serveur",
 
@@ -499,7 +499,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "work_mode_remote": "Remote",
         "work_mode_hybrid": "Hybrid",
         "work_mode_onsite": "On-site",
-        "lbl_railway_key": "Railway key",
+        "lbl_railway_key": "Server key",
         "lbl_key_missing": "Key missing",
         "lbl_api_key_missing_server": "API key missing on server",
 
@@ -757,7 +757,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "work_mode_remote": "Remoto",
         "work_mode_hybrid": "Híbrido",
         "work_mode_onsite": "Presencial",
-        "lbl_railway_key": "Clave Railway",
+        "lbl_railway_key": "Clave del servidor",
         "lbl_key_missing": "Clave faltante",
         "lbl_api_key_missing_server": "Clave API faltante en servidor",
 

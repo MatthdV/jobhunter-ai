@@ -164,19 +164,15 @@
         ] %}
         {% for val, label in filters %}
         {% set count = status_counts.get(val, 0) if status_counts else 0 %}
-        <button
-          hx-get="/api/jobs?status={{ val if val != 'all' else '' }}&limit=50&offset=0"
-          hx-target="#jobs-table"
-          hx-swap="innerHTML"
-          onclick="setActiveTab(this)"
-          class="tab-pill px-3 py-1.5 rounded-full text-xs font-semibold border transition-all mb-1
-                 {% if (status_filter == val) or (status_filter == 'all' and val == 'all') %}
-                   bg-indigo-600 text-white border-indigo-600
-                 {% else %}
-                   bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600
-                 {% endif %}">
+        <a href="/{% if val != 'all' %}?status={{ val }}{% endif %}"
+           class="tab-pill px-3 py-1.5 rounded-full text-xs font-semibold border transition-all mb-1
+                  {% if (status_filter == val) or (status_filter == 'all' and val == 'all') %}
+                    bg-indigo-600 text-white border-indigo-600
+                  {% else %}
+                    bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600
+                  {% endif %}">
           {{ label }}{% if count > 0 %} <span class="opacity-70">({{ count }})</span>{% endif %}
-        </button>
+        </a>
         {% endfor %}
         <a href="/?has_contact=1"
            id="filter-has-contact"
@@ -228,22 +224,16 @@
         <span>{{ jobs | length }} offre{{ 's' if jobs | length != 1 else '' }}</span>
         <div class="flex gap-2">
           {% if offset and offset > 0 %}
-          <button
-            hx-get="/api/jobs?status={{ status_filter if status_filter != 'all' else '' }}&limit=50&offset={{ [offset - 50, 0] | max }}"
-            hx-target="#jobs-table"
-            hx-swap="innerHTML"
-            class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
+          <a href="/?{% if status_filter != 'all' %}status={{ status_filter }}&{% endif %}offset={{ [offset - 50, 0] | max }}"
+             class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
             {{ t.pagination_prev if t else "← Précédent" }}
-          </button>
+          </a>
           {% endif %}
           {% if jobs | length == 50 %}
-          <button
-            hx-get="/api/jobs?status={{ status_filter if status_filter != 'all' else '' }}&limit=50&offset={{ (offset or 0) + 50 }}"
-            hx-target="#jobs-table"
-            hx-swap="innerHTML"
-            class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
+          <a href="/?{% if status_filter != 'all' %}status={{ status_filter }}&{% endif %}offset={{ (offset or 0) + 50 }}"
+             class="px-3 py-1.5 rounded border border-gray-200 text-xs font-medium hover:bg-gray-50 transition-colors">
             {{ t.pagination_next if t else "Suivant →" }}
-          </button>
+          </a>
           {% endif %}
         </div>
       </div>
@@ -254,14 +244,4 @@
 
 </div>
 
-<script>
-  function setActiveTab(btn) {
-    document.querySelectorAll('#status-tabs .tab-pill').forEach(t => {
-      t.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600');
-      t.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
-    });
-    btn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
-    btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600');
-  }
-</script>
 {% endblock %}

@@ -68,15 +68,9 @@ def _onboarding_state(user: User) -> dict[str, bool]:
                 "openrouter_api_key",
             )
         )
-    # Fallback: a shared server key on Railway counts as configured
-    if not key_done:
-        key_done = bool(
-            settings.anthropic_api_key
-            or settings.openai_api_key
-            or settings.mistral_api_key
-            or settings.deepseek_api_key
-            or settings.openrouter_api_key
-        )
+    # No global fallback: LLM keys are user-owned (get_settings_for_user ignores
+    # server-wide keys), so the checklist must not claim a key the match phase
+    # won't accept.
 
     defaults = profile.get("search_defaults", {}) or {}
     sources_done = bool(defaults.get("search_terms")) or any(

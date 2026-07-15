@@ -62,7 +62,7 @@ class FranceTravailScraper(BaseScraper):
         if not client_id or not client_secret:
             raise ConfigurationError(
                 "FRANCE_TRAVAIL_CLIENT_ID and FRANCE_TRAVAIL_CLIENT_SECRET must be set "
-                "— keys are provided globally via Railway ENV"
+                "— keys are provided globally via the server ENV"
             )
         self._client_id = client_id
         self._client_secret = client_secret
